@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -111,6 +113,29 @@ type userAvailableChannel struct {
 	Platforms   []userChannelPlatformSection `json:"platforms"`
 }
 
+// cursorModelSquareResponse is a compact desktop-client view built from the
+// current user's Cursor dedicated OpenAI/Claude keys.
+type cursorModelSquareResponse struct {
+	Keys   []cursorModelSquareKey   `json:"keys"`
+	Models []cursorModelSquareModel `json:"models"`
+}
+
+type cursorModelSquareKey struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	GroupID  int64  `json:"group_id"`
+	Group    string `json:"group"`
+	Platform string `json:"platform"`
+}
+
+type cursorModelSquareModel struct {
+	Name     string                     `json:"name"`
+	Platform string                     `json:"platform"`
+	GroupID  int64                      `json:"group_id"`
+	Group    string                     `json:"group"`
+	Pricing  *userSupportedModelPricing `json:"pricing"`
+}
+
 // List 列出当前用户可见的「可用渠道」。
 // GET /api/v1/channels/available
 func (h *AvailableChannelHandler) List(c *gin.Context) {
@@ -164,6 +189,108 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 	}
 
 	response.Success(c, out)
+}
+
+// CursorModels returns model names and prices for the current user's Cursor
+// dedicated OpenAI/Claude keys. It does not depend on the available-channels
+// feature flag because the desktop client needs this data as part of its
+// account dashboard.
+// GET /api/v1/channels/cursor-models
+func (h *AvailableChannelHandler) CursorModels(c *gin.Context) {
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	keys, err := h.apiKeyService.ListCursorDedicated(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	allowedGroups := make(map[int64]service.Group)
+	outKeys := make([]cursorModelSquareKey, 0, len(keys))
+	for i := range keys {
+		key := keys[i]
+		if key.GroupID == nil || key.Group == nil {
+			continue
+		}
+		platform := strings.ToLower(strings.TrimSpace(key.Group.Platform))
+		if platform != "openai" && platform != "anthropic" && platform != "claude" {
+			continue
+		}
+		allowedGroups[*key.GroupID] = *key.Group
+		outKeys = append(outKeys, cursorModelSquareKey{
+			ID:       key.ID,
+			Name:     key.Name,
+			GroupID:  *key.GroupID,
+			Group:    key.Group.Name,
+			Platform: platform,
+		})
+	}
+
+	if len(allowedGroups) == 0 {
+		response.Success(c, cursorModelSquareResponse{Keys: outKeys, Models: []cursorModelSquareModel{}})
+		return
+	}
+
+	channels, err := h.channelService.ListAvailable(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	seen := make(map[string]struct{})
+	models := make([]cursorModelSquareModel, 0)
+	for _, ch := range channels {
+		if ch.Status != service.StatusActive {
+			continue
+		}
+		channelGroupIDs := make(map[int64]struct{}, len(ch.Groups))
+		for _, group := range ch.Groups {
+			channelGroupIDs[group.ID] = struct{}{}
+		}
+		for _, model := range ch.SupportedModels {
+			for groupID, group := range allowedGroups {
+				if _, ok := channelGroupIDs[groupID]; !ok {
+					continue
+				}
+				platform := strings.ToLower(strings.TrimSpace(group.Platform))
+				modelPlatform := strings.ToLower(strings.TrimSpace(model.Platform))
+				if platform == "claude" {
+					platform = "anthropic"
+				}
+				if modelPlatform == "claude" {
+					modelPlatform = "anthropic"
+				}
+				if modelPlatform != platform {
+					continue
+				}
+				key := fmt.Sprintf("%d:%s:%s", groupID, modelPlatform, strings.ToLower(model.Name))
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				seen[key] = struct{}{}
+				models = append(models, cursorModelSquareModel{
+					Name:     model.Name,
+					Platform: modelPlatform,
+					GroupID:  groupID,
+					Group:    group.Name,
+					Pricing:  toUserPricing(model.Pricing),
+				})
+			}
+		}
+	}
+
+	sort.SliceStable(models, func(i, j int) bool {
+		if models[i].Platform != models[j].Platform {
+			return models[i].Platform < models[j].Platform
+		}
+		return strings.ToLower(models[i].Name) < strings.ToLower(models[j].Name)
+	})
+
+	response.Success(c, cursorModelSquareResponse{Keys: outKeys, Models: models})
 }
 
 // buildPlatformSections 把一个渠道按 visibleGroups 的平台集合拆成有序的 section 列表：
