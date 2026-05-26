@@ -168,7 +168,7 @@ func TestCursorModelSquareFallbackModels_DefaultsWhenNoChannelModels(t *testing.
 			return nil
 		}
 		return &service.ChannelModelPricing{BillingMode: service.BillingModeToken, InputPrice: testFloat64Ptr(0.0000025)}
-	})
+	}, map[int64]float64{2: 2})
 
 	require.NotEmpty(t, models)
 	names := make([]string, 0, len(models))
@@ -189,7 +189,7 @@ func TestCursorModelSquareFallbackModels_DefaultsWhenNoChannelModels(t *testing.
 	}
 	require.NotNil(t, gpt54.Pricing)
 	require.NotNil(t, gpt54.Pricing.InputPrice)
-	require.InDelta(t, 0.0000025, *gpt54.Pricing.InputPrice, 1e-12)
+	require.InDelta(t, 0.000005, *gpt54.Pricing.InputPrice, 1e-12)
 }
 
 func TestCursorModelSquareFallbackModels_DoesNotDuplicateChannelModels(t *testing.T) {
@@ -198,12 +198,47 @@ func TestCursorModelSquareFallbackModels_DoesNotDuplicateChannelModels(t *testin
 	}
 	seen := map[string]struct{}{"1:anthropic:claude-sonnet-4-6": {}}
 
-	models := cursorModelSquareFallbackModels(groups, seen, nil)
+	models := cursorModelSquareFallbackModels(groups, seen, nil, nil)
 
 	for _, model := range models {
 		require.NotEqual(t, "claude-sonnet-4-6", model.Name)
 	}
 	require.Contains(t, seen, "1:anthropic:claude-sonnet-4-6")
+}
+
+func TestApplyPricingMultiplier_MultipliesAllDisplayedFields(t *testing.T) {
+	pricing := &service.ChannelModelPricing{
+		BillingMode:      service.BillingModeToken,
+		InputPrice:       testFloat64Ptr(1),
+		OutputPrice:      testFloat64Ptr(2),
+		CacheWritePrice:  testFloat64Ptr(3),
+		CacheReadPrice:   testFloat64Ptr(4),
+		ImageOutputPrice: testFloat64Ptr(5),
+		PerRequestPrice:  testFloat64Ptr(6),
+		Intervals: []service.PricingInterval{{
+			InputPrice:      testFloat64Ptr(7),
+			OutputPrice:     testFloat64Ptr(8),
+			CacheWritePrice: testFloat64Ptr(9),
+			CacheReadPrice:  testFloat64Ptr(10),
+			PerRequestPrice: testFloat64Ptr(11),
+		}},
+	}
+
+	got := applyPricingMultiplier(pricing, 1.5)
+
+	require.NotSame(t, pricing, got)
+	require.InDelta(t, 1.5, *got.InputPrice, 1e-12)
+	require.InDelta(t, 3.0, *got.OutputPrice, 1e-12)
+	require.InDelta(t, 4.5, *got.CacheWritePrice, 1e-12)
+	require.InDelta(t, 6.0, *got.CacheReadPrice, 1e-12)
+	require.InDelta(t, 7.5, *got.ImageOutputPrice, 1e-12)
+	require.InDelta(t, 9.0, *got.PerRequestPrice, 1e-12)
+	require.InDelta(t, 10.5, *got.Intervals[0].InputPrice, 1e-12)
+	require.InDelta(t, 12.0, *got.Intervals[0].OutputPrice, 1e-12)
+	require.InDelta(t, 13.5, *got.Intervals[0].CacheWritePrice, 1e-12)
+	require.InDelta(t, 15.0, *got.Intervals[0].CacheReadPrice, 1e-12)
+	require.InDelta(t, 16.5, *got.Intervals[0].PerRequestPrice, 1e-12)
+	require.InDelta(t, 1.0, *pricing.InputPrice, 1e-12)
 }
 
 func testFloat64Ptr(v float64) *float64 {

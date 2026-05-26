@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -252,6 +253,12 @@ func (h *AvailableChannelHandler) CursorModels(c *gin.Context) {
 		return
 	}
 
+	groupMultipliers, err := h.cursorModelGroupMultipliers(c.Request.Context(), subject.UserID, allowedGroups)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
 	channels, err := h.channelService.ListAvailable(c.Request.Context())
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -288,13 +295,13 @@ func (h *AvailableChannelHandler) CursorModels(c *gin.Context) {
 					modelPlatform,
 					groupID,
 					group.Name,
-					toUserPricing(model.Pricing),
+					toUserPricing(applyPricingMultiplier(model.Pricing, groupMultipliers[groupID])),
 				))
 			}
 		}
 	}
 
-	models = append(models, cursorModelSquareFallbackModels(allowedGroups, seen, h.channelService.DisplayPricingForModel)...)
+	models = append(models, cursorModelSquareFallbackModels(allowedGroups, seen, h.channelService.DisplayPricingForModel, groupMultipliers)...)
 
 	sort.SliceStable(models, func(i, j int) bool {
 		if models[i].Platform != models[j].Platform {
@@ -306,6 +313,25 @@ func (h *AvailableChannelHandler) CursorModels(c *gin.Context) {
 	response.Success(c, cursorModelSquareResponse{Keys: outKeys, Models: models})
 }
 
+func (h *AvailableChannelHandler) cursorModelGroupMultipliers(ctx context.Context, userID int64, groups map[int64]service.Group) (map[int64]float64, error) {
+	userRates, err := h.apiKeyService.GetUserGroupRates(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64]float64, len(groups))
+	for groupID, group := range groups {
+		multiplier := group.RateMultiplier
+		if multiplier <= 0 {
+			multiplier = 1
+		}
+		if userRate, ok := userRates[groupID]; ok && userRate > 0 {
+			multiplier = userRate
+		}
+		out[groupID] = multiplier
+	}
+	return out, nil
+}
+
 func normalizeCursorModelPlatform(platform string) string {
 	platform = strings.ToLower(strings.TrimSpace(platform))
 	if platform == "claude" {
@@ -314,7 +340,7 @@ func normalizeCursorModelPlatform(platform string) string {
 	return platform
 }
 
-func cursorModelSquareFallbackModels(groups map[int64]service.Group, existing map[string]struct{}, pricingForModel func(string) *service.ChannelModelPricing) []cursorModelSquareModel {
+func cursorModelSquareFallbackModels(groups map[int64]service.Group, existing map[string]struct{}, pricingForModel func(string) *service.ChannelModelPricing, multipliers map[int64]float64) []cursorModelSquareModel {
 	models := make([]cursorModelSquareModel, 0)
 	for groupID, group := range groups {
 		platform := normalizeCursorModelPlatform(group.Platform)
@@ -328,6 +354,7 @@ func cursorModelSquareFallbackModels(groups map[int64]service.Group, existing ma
 			if pricingForModel != nil {
 				pricing = pricingForModel(modelName)
 			}
+			pricing = applyPricingMultiplier(pricing, multipliers[groupID])
 			models = append(models, buildCursorModelSquareModel(
 				modelName,
 				platform,
@@ -338,6 +365,38 @@ func cursorModelSquareFallbackModels(groups map[int64]service.Group, existing ma
 		}
 	}
 	return models
+}
+
+func applyPricingMultiplier(p *service.ChannelModelPricing, multiplier float64) *service.ChannelModelPricing {
+	if p == nil {
+		return nil
+	}
+	if multiplier <= 0 {
+		multiplier = 1
+	}
+	out := p.Clone()
+	out.InputPrice = multiplyFloatPtr(out.InputPrice, multiplier)
+	out.OutputPrice = multiplyFloatPtr(out.OutputPrice, multiplier)
+	out.CacheWritePrice = multiplyFloatPtr(out.CacheWritePrice, multiplier)
+	out.CacheReadPrice = multiplyFloatPtr(out.CacheReadPrice, multiplier)
+	out.ImageOutputPrice = multiplyFloatPtr(out.ImageOutputPrice, multiplier)
+	out.PerRequestPrice = multiplyFloatPtr(out.PerRequestPrice, multiplier)
+	for i := range out.Intervals {
+		out.Intervals[i].InputPrice = multiplyFloatPtr(out.Intervals[i].InputPrice, multiplier)
+		out.Intervals[i].OutputPrice = multiplyFloatPtr(out.Intervals[i].OutputPrice, multiplier)
+		out.Intervals[i].CacheWritePrice = multiplyFloatPtr(out.Intervals[i].CacheWritePrice, multiplier)
+		out.Intervals[i].CacheReadPrice = multiplyFloatPtr(out.Intervals[i].CacheReadPrice, multiplier)
+		out.Intervals[i].PerRequestPrice = multiplyFloatPtr(out.Intervals[i].PerRequestPrice, multiplier)
+	}
+	return &out
+}
+
+func multiplyFloatPtr(value *float64, multiplier float64) *float64 {
+	if value == nil {
+		return nil
+	}
+	out := *value * multiplier
+	return &out
 }
 
 func buildCursorModelSquareModel(name, platform string, groupID int64, group string, pricing *userSupportedModelPricing) cursorModelSquareModel {
