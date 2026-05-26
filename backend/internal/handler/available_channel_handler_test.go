@@ -155,3 +155,57 @@ func TestBuildPlatformSections_GroupsByPlatform(t *testing.T) {
 	require.Len(t, sections[0].SupportedModels, 1)
 	require.Equal(t, "claude-sonnet-4-6", sections[0].SupportedModels[0].Name)
 }
+
+func TestCursorModelSquareFallbackModels_DefaultsWhenNoChannelModels(t *testing.T) {
+	groups := map[int64]service.Group{
+		1: {ID: 1, Name: "Claude默认分组", Platform: "anthropic"},
+		2: {ID: 2, Name: "OpenAI默认分组", Platform: "openai"},
+	}
+	seen := map[string]struct{}{}
+
+	models := cursorModelSquareFallbackModels(groups, seen, func(model string) *service.ChannelModelPricing {
+		if model != "gpt-5.4" {
+			return nil
+		}
+		return &service.ChannelModelPricing{BillingMode: service.BillingModeToken, InputPrice: testFloat64Ptr(0.0000025)}
+	})
+
+	require.NotEmpty(t, models)
+	names := make([]string, 0, len(models))
+	for _, model := range models {
+		names = append(names, model.Name)
+	}
+	require.Contains(t, names, "claude-sonnet-4-6")
+	require.Contains(t, names, "gpt-5.4")
+	require.Contains(t, seen, "1:anthropic:claude-sonnet-4-6")
+	require.Contains(t, seen, "2:openai:gpt-5.4")
+
+	var gpt54 cursorModelSquareModel
+	for _, model := range models {
+		if model.Name == "gpt-5.4" {
+			gpt54 = model
+			break
+		}
+	}
+	require.NotNil(t, gpt54.Pricing)
+	require.NotNil(t, gpt54.Pricing.InputPrice)
+	require.InDelta(t, 0.0000025, *gpt54.Pricing.InputPrice, 1e-12)
+}
+
+func TestCursorModelSquareFallbackModels_DoesNotDuplicateChannelModels(t *testing.T) {
+	groups := map[int64]service.Group{
+		1: {ID: 1, Name: "Claude默认分组", Platform: "claude"},
+	}
+	seen := map[string]struct{}{"1:anthropic:claude-sonnet-4-6": {}}
+
+	models := cursorModelSquareFallbackModels(groups, seen, nil)
+
+	for _, model := range models {
+		require.NotEqual(t, "claude-sonnet-4-6", model.Name)
+	}
+	require.Contains(t, seen, "1:anthropic:claude-sonnet-4-6")
+}
+
+func testFloat64Ptr(v float64) *float64 {
+	return &v
+}

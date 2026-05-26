@@ -28,6 +28,23 @@ type AvailableChannelHandler struct {
 	settingService *service.SettingService
 }
 
+var cursorModelSquareDefaults = map[string][]string{
+	"anthropic": {
+		"claude-opus-4-6",
+		"claude-sonnet-4-6",
+		"claude-sonnet-4-5",
+		"claude-haiku-4-5",
+	},
+	"openai": {
+		"gpt-5.4",
+		"gpt-5.4-mini",
+		"gpt-5.2-codex",
+		"gpt-5.2",
+		"gpt-5.1-codex",
+		"gpt-5.1",
+	},
+}
+
 // NewAvailableChannelHandler 创建用户侧可用渠道 handler。
 func NewAvailableChannelHandler(
 	channelService *service.ChannelService,
@@ -216,7 +233,7 @@ func (h *AvailableChannelHandler) CursorModels(c *gin.Context) {
 		if key.GroupID == nil || key.Group == nil {
 			continue
 		}
-		platform := strings.ToLower(strings.TrimSpace(key.Group.Platform))
+		platform := normalizeCursorModelPlatform(key.Group.Platform)
 		if platform != "openai" && platform != "anthropic" && platform != "claude" {
 			continue
 		}
@@ -256,14 +273,8 @@ func (h *AvailableChannelHandler) CursorModels(c *gin.Context) {
 				if _, ok := channelGroupIDs[groupID]; !ok {
 					continue
 				}
-				platform := strings.ToLower(strings.TrimSpace(group.Platform))
-				modelPlatform := strings.ToLower(strings.TrimSpace(model.Platform))
-				if platform == "claude" {
-					platform = "anthropic"
-				}
-				if modelPlatform == "claude" {
-					modelPlatform = "anthropic"
-				}
+				platform := normalizeCursorModelPlatform(group.Platform)
+				modelPlatform := normalizeCursorModelPlatform(model.Platform)
 				if modelPlatform != platform {
 					continue
 				}
@@ -272,16 +283,18 @@ func (h *AvailableChannelHandler) CursorModels(c *gin.Context) {
 					continue
 				}
 				seen[key] = struct{}{}
-				models = append(models, cursorModelSquareModel{
-					Name:     model.Name,
-					Platform: modelPlatform,
-					GroupID:  groupID,
-					Group:    group.Name,
-					Pricing:  toUserPricing(model.Pricing),
-				})
+				models = append(models, buildCursorModelSquareModel(
+					model.Name,
+					modelPlatform,
+					groupID,
+					group.Name,
+					toUserPricing(model.Pricing),
+				))
 			}
 		}
 	}
+
+	models = append(models, cursorModelSquareFallbackModels(allowedGroups, seen, h.channelService.DisplayPricingForModel)...)
 
 	sort.SliceStable(models, func(i, j int) bool {
 		if models[i].Platform != models[j].Platform {
@@ -291,6 +304,50 @@ func (h *AvailableChannelHandler) CursorModels(c *gin.Context) {
 	})
 
 	response.Success(c, cursorModelSquareResponse{Keys: outKeys, Models: models})
+}
+
+func normalizeCursorModelPlatform(platform string) string {
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	if platform == "claude" {
+		return "anthropic"
+	}
+	return platform
+}
+
+func cursorModelSquareFallbackModels(groups map[int64]service.Group, existing map[string]struct{}, pricingForModel func(string) *service.ChannelModelPricing) []cursorModelSquareModel {
+	models := make([]cursorModelSquareModel, 0)
+	for groupID, group := range groups {
+		platform := normalizeCursorModelPlatform(group.Platform)
+		for _, modelName := range cursorModelSquareDefaults[platform] {
+			key := fmt.Sprintf("%d:%s:%s", groupID, platform, strings.ToLower(modelName))
+			if _, ok := existing[key]; ok {
+				continue
+			}
+			existing[key] = struct{}{}
+			var pricing *service.ChannelModelPricing
+			if pricingForModel != nil {
+				pricing = pricingForModel(modelName)
+			}
+			models = append(models, buildCursorModelSquareModel(
+				modelName,
+				platform,
+				groupID,
+				group.Name,
+				toUserPricing(pricing),
+			))
+		}
+	}
+	return models
+}
+
+func buildCursorModelSquareModel(name, platform string, groupID int64, group string, pricing *userSupportedModelPricing) cursorModelSquareModel {
+	return cursorModelSquareModel{
+		Name:     name,
+		Platform: platform,
+		GroupID:  groupID,
+		Group:    group,
+		Pricing:  pricing,
+	}
 }
 
 // buildPlatformSections 把一个渠道按 visibleGroups 的平台集合拆成有序的 section 列表：
