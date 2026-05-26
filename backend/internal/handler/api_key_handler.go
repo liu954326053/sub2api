@@ -39,27 +39,27 @@ type CreateAPIKeyRequest struct {
 	ExpiresInDays *int     `json:"expires_in_days"` // 过期天数
 
 	// Rate limit fields (0 = unlimited)
-	RateLimit5h *float64 `json:"rate_limit_5h"`
-	RateLimit1d *float64 `json:"rate_limit_1d"`
-	RateLimit7d *float64 `json:"rate_limit_7d"`
+	RateLimit5h     *float64 `json:"rate_limit_5h"`
+	RateLimit1d     *float64 `json:"rate_limit_1d"`
+	RateLimit7d     *float64 `json:"rate_limit_7d"`
+	CursorDedicated bool     `json:"cursor_dedicated"`
 }
 
 // UpdateAPIKeyRequest represents the update API key request payload
 type UpdateAPIKeyRequest struct {
-	Name        string   `json:"name"`
-	GroupID     *int64   `json:"group_id"`
-	Status      string   `json:"status" binding:"omitempty,oneof=active inactive"`
-	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
-	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
-	Quota       *float64 `json:"quota"`        // 配额限制 (USD), 0=无限制
-	ExpiresAt   *string  `json:"expires_at"`   // 过期时间 (ISO 8601)
-	ResetQuota  *bool    `json:"reset_quota"`  // 重置已用配额
-
-	// Rate limit fields (nil = no change, 0 = unlimited)
+	Name                string   `json:"name"`
+	GroupID             *int64   `json:"group_id"`
+	Status              string   `json:"status" binding:"omitempty,oneof=active inactive"`
+	IPWhitelist         []string `json:"ip_whitelist"`
+	IPBlacklist         []string `json:"ip_blacklist"`
+	Quota               *float64 `json:"quota"`
+	ExpiresAt           *string  `json:"expires_at"`
+	ResetQuota          *bool    `json:"reset_quota"`
 	RateLimit5h         *float64 `json:"rate_limit_5h"`
 	RateLimit1d         *float64 `json:"rate_limit_1d"`
 	RateLimit7d         *float64 `json:"rate_limit_7d"`
-	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"` // 重置限速用量
+	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"`
+	CursorDedicated     *bool    `json:"cursor_dedicated"`
 }
 
 // List handles listing user's API keys with pagination
@@ -92,6 +92,12 @@ func (h *APIKeyHandler) List(c *gin.Context) {
 		gid, err := strconv.ParseInt(groupIDStr, 10, 64)
 		if err == nil {
 			filters.GroupID = &gid
+		}
+	}
+	if cursorDedicatedStr := strings.TrimSpace(c.Query("cursor_dedicated")); cursorDedicatedStr != "" {
+		value, err := strconv.ParseBool(cursorDedicatedStr)
+		if err == nil {
+			filters.CursorDedicated = &value
 		}
 	}
 
@@ -138,6 +144,28 @@ func (h *APIKeyHandler) GetByID(c *gin.Context) {
 	response.Success(c, dto.APIKeyFromService(key))
 }
 
+// ListCursorDedicated handles listing current user's Cursor dedicated API keys.
+// GET /api/v1/keys/cursor
+func (h *APIKeyHandler) ListCursorDedicated(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	keys, err := h.apiKeyService.ListCursorDedicated(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	out := make([]dto.APIKey, 0, len(keys))
+	for i := range keys {
+		out = append(out, *dto.APIKeyFromService(&keys[i]))
+	}
+	response.Success(c, out)
+}
+
 // Create handles creating a new API key
 // POST /api/v1/api-keys
 func (h *APIKeyHandler) Create(c *gin.Context) {
@@ -154,12 +182,13 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 	}
 
 	svcReq := service.CreateAPIKeyRequest{
-		Name:          req.Name,
-		GroupID:       req.GroupID,
-		CustomKey:     req.CustomKey,
-		IPWhitelist:   req.IPWhitelist,
-		IPBlacklist:   req.IPBlacklist,
-		ExpiresInDays: req.ExpiresInDays,
+		Name:            req.Name,
+		GroupID:         req.GroupID,
+		CustomKey:       req.CustomKey,
+		IPWhitelist:     req.IPWhitelist,
+		IPBlacklist:     req.IPBlacklist,
+		ExpiresInDays:   req.ExpiresInDays,
+		CursorDedicated: req.CursorDedicated,
 	}
 	if req.Quota != nil {
 		svcReq.Quota = *req.Quota
@@ -213,6 +242,7 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 		RateLimit1d:         req.RateLimit1d,
 		RateLimit7d:         req.RateLimit7d,
 		ResetRateLimitUsage: req.ResetRateLimitUsage,
+		CursorDedicated:     req.CursorDedicated,
 	}
 	if req.Name != "" {
 		svcReq.Name = &req.Name

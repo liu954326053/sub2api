@@ -95,6 +95,11 @@ func Status(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldStatus, v))
 }
 
+// CursorDedicated applies equality check predicate on the "cursor_dedicated" field. It's identical to CursorDedicatedEQ.
+func CursorDedicated(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldCursorDedicated, v))
+}
+
 // LastUsedAt applies equality check predicate on the "last_used_at" field. It's identical to LastUsedAtEQ.
 func LastUsedAt(v time.Time) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldLastUsedAt, v))
@@ -533,6 +538,16 @@ func StatusEqualFold(v string) predicate.APIKey {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// CursorDedicatedEQ applies the EQ predicate on the "cursor_dedicated" field.
+func CursorDedicatedEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldCursorDedicated, v))
+}
+
+// CursorDedicatedNEQ applies the NEQ predicate on the "cursor_dedicated" field.
+func CursorDedicatedNEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldCursorDedicated, v))
 }
 
 // LastUsedAtEQ applies the EQ predicate on the "last_used_at" field.

@@ -20,13 +20,14 @@ import (
 )
 
 var (
-	ErrAPIKeyNotFound     = infraerrors.NotFound("API_KEY_NOT_FOUND", "api key not found")
-	ErrGroupNotAllowed    = infraerrors.Forbidden("GROUP_NOT_ALLOWED", "user is not allowed to bind this group")
-	ErrAPIKeyExists       = infraerrors.Conflict("API_KEY_EXISTS", "api key already exists")
-	ErrAPIKeyTooShort     = infraerrors.BadRequest("API_KEY_TOO_SHORT", "api key must be at least 16 characters")
-	ErrAPIKeyInvalidChars = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
-	ErrAPIKeyRateLimited  = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
-	ErrInvalidIPPattern   = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
+	ErrAPIKeyNotFound         = infraerrors.NotFound("API_KEY_NOT_FOUND", "api key not found")
+	ErrGroupNotAllowed        = infraerrors.Forbidden("GROUP_NOT_ALLOWED", "user is not allowed to bind this group")
+	ErrAPIKeyExists           = infraerrors.Conflict("API_KEY_EXISTS", "api key already exists")
+	ErrAPIKeyTooShort         = infraerrors.BadRequest("API_KEY_TOO_SHORT", "api key must be at least 16 characters")
+	ErrAPIKeyInvalidChars     = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
+	ErrAPIKeyRateLimited      = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
+	ErrInvalidIPPattern       = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
+	ErrCursorKeyRequiresGroup = infraerrors.BadRequest("CURSOR_KEY_REQUIRES_GROUP", "cursor dedicated api key must bind a group")
 	// ErrAPIKeyExpired        = infraerrors.Forbidden("API_KEY_EXPIRED", "api key has expired")
 	ErrAPIKeyExpired = infraerrors.Forbidden("API_KEY_EXPIRED", "api key 已过期")
 	// ErrAPIKeyQuotaExhausted = infraerrors.TooManyRequests("API_KEY_QUOTA_EXHAUSTED", "api key quota exhausted")
@@ -163,6 +164,8 @@ type CreateAPIKeyRequest struct {
 	RateLimit5h float64 `json:"rate_limit_5h"`
 	RateLimit1d float64 `json:"rate_limit_1d"`
 	RateLimit7d float64 `json:"rate_limit_7d"`
+
+	CursorDedicated bool `json:"cursor_dedicated"`
 }
 
 // UpdateAPIKeyRequest 更新API Key请求
@@ -184,6 +187,8 @@ type UpdateAPIKeyRequest struct {
 	RateLimit1d         *float64 `json:"rate_limit_1d"`
 	RateLimit7d         *float64 `json:"rate_limit_7d"`
 	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"` // Reset all usage counters to 0
+
+	CursorDedicated *bool `json:"cursor_dedicated"`
 }
 
 // APIKeyService API Key服务
@@ -325,6 +330,38 @@ func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group 
 	return user.CanBindGroup(group.ID, group.IsExclusive)
 }
 
+func (s *APIKeyService) cursorPlatformForGroup(ctx context.Context, groupID *int64) (string, error) {
+	if groupID == nil || *groupID <= 0 {
+		return "", ErrCursorKeyRequiresGroup
+	}
+	group, err := s.groupRepo.GetByID(ctx, *groupID)
+	if err != nil {
+		return "", fmt.Errorf("get group: %w", err)
+	}
+	if strings.TrimSpace(group.Platform) == "" {
+		return "", ErrCursorKeyRequiresGroup
+	}
+	return group.Platform, nil
+}
+
+func (s *APIKeyService) enforceCursorDedicatedUnique(ctx context.Context, userID int64, apiKey *APIKey) error {
+	if apiKey == nil || !apiKey.CursorDedicated {
+		return nil
+	}
+	platform, err := s.cursorPlatformForGroup(ctx, apiKey.GroupID)
+	if err != nil {
+		return err
+	}
+	type cursorDedicatedCleaner interface {
+		ClearCursorDedicatedByUserIDAndPlatform(ctx context.Context, userID int64, platform string, exceptID int64) error
+	}
+	cleaner, ok := s.apiKeyRepo.(cursorDedicatedCleaner)
+	if !ok {
+		return nil
+	}
+	return cleaner.ClearCursorDedicatedByUserIDAndPlatform(ctx, userID, platform, apiKey.ID)
+}
+
 // Create 创建API Key
 func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIKeyRequest) (*APIKey, error) {
 	// 验证用户存在
@@ -357,6 +394,11 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		// 检查用户是否可以绑定该分组
 		if !s.canUserBindGroup(ctx, user, group) {
 			return nil, ErrGroupNotAllowed
+		}
+	}
+	if req.CursorDedicated {
+		if _, err := s.cursorPlatformForGroup(ctx, req.GroupID); err != nil {
+			return nil, err
 		}
 	}
 
@@ -397,18 +439,19 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	// 创建API Key记录
 	apiKey := &APIKey{
-		UserID:      userID,
-		Key:         key,
-		Name:        req.Name,
-		GroupID:     req.GroupID,
-		Status:      StatusActive,
-		IPWhitelist: req.IPWhitelist,
-		IPBlacklist: req.IPBlacklist,
-		Quota:       req.Quota,
-		QuotaUsed:   0,
-		RateLimit5h: req.RateLimit5h,
-		RateLimit1d: req.RateLimit1d,
-		RateLimit7d: req.RateLimit7d,
+		UserID:          userID,
+		Key:             key,
+		Name:            req.Name,
+		GroupID:         req.GroupID,
+		Status:          StatusActive,
+		IPWhitelist:     req.IPWhitelist,
+		IPBlacklist:     req.IPBlacklist,
+		Quota:           req.Quota,
+		QuotaUsed:       0,
+		RateLimit5h:     req.RateLimit5h,
+		RateLimit1d:     req.RateLimit1d,
+		RateLimit7d:     req.RateLimit7d,
+		CursorDedicated: req.CursorDedicated,
 	}
 
 	// Set expiration time if specified
@@ -419,6 +462,9 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	if err := s.apiKeyRepo.Create(ctx, apiKey); err != nil {
 		return nil, fmt.Errorf("create api key: %w", err)
+	}
+	if err := s.enforceCursorDedicatedUnique(ctx, userID, apiKey); err != nil {
+		return nil, err
 	}
 
 	s.InvalidateAuthCacheByKey(ctx, apiKey.Key)
@@ -434,6 +480,20 @@ func (s *APIKeyService) List(ctx context.Context, userID int64, params paginatio
 		return nil, nil, fmt.Errorf("list api keys: %w", err)
 	}
 	return keys, pagination, nil
+}
+
+func (s *APIKeyService) ListCursorDedicated(ctx context.Context, userID int64) ([]APIKey, error) {
+	cursorOnly := true
+	keys, _, err := s.apiKeyRepo.ListByUserID(ctx, userID, pagination.PaginationParams{
+		Page:      1,
+		PageSize:  1000,
+		SortBy:    "created_at",
+		SortOrder: string(pagination.SortOrderDesc),
+	}, APIKeyListFilters{CursorDedicated: &cursorOnly})
+	if err != nil {
+		return nil, fmt.Errorf("list cursor api keys: %w", err)
+	}
+	return keys, nil
 }
 
 func (s *APIKeyService) VerifyOwnership(ctx context.Context, userID int64, apiKeyIDs []int64) ([]int64, error) {
@@ -611,6 +671,14 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	if req.RateLimit7d != nil {
 		apiKey.RateLimit7d = *req.RateLimit7d
 	}
+	if req.CursorDedicated != nil {
+		apiKey.CursorDedicated = *req.CursorDedicated
+	}
+	if apiKey.CursorDedicated {
+		if _, err := s.cursorPlatformForGroup(ctx, apiKey.GroupID); err != nil {
+			return nil, err
+		}
+	}
 	resetRateLimit := req.ResetRateLimitUsage != nil && *req.ResetRateLimitUsage
 	if resetRateLimit {
 		apiKey.Usage5h = 0
@@ -623,6 +691,9 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 
 	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
 		return nil, fmt.Errorf("update api key: %w", err)
+	}
+	if err := s.enforceCursorDedicatedUnique(ctx, userID, apiKey); err != nil {
+		return nil, err
 	}
 
 	s.InvalidateAuthCacheByKey(ctx, apiKey.Key)

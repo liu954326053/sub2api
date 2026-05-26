@@ -113,6 +113,20 @@ func (_c *APIKeyCreate) SetNillableStatus(v *string) *APIKeyCreate {
 	return _c
 }
 
+// SetCursorDedicated sets the "cursor_dedicated" field.
+func (_c *APIKeyCreate) SetCursorDedicated(v bool) *APIKeyCreate {
+	_c.mutation.SetCursorDedicated(v)
+	return _c
+}
+
+// SetNillableCursorDedicated sets the "cursor_dedicated" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableCursorDedicated(v *bool) *APIKeyCreate {
+	if v != nil {
+		_c.SetCursorDedicated(*v)
+	}
+	return _c
+}
+
 // SetLastUsedAt sets the "last_used_at" field.
 func (_c *APIKeyCreate) SetLastUsedAt(v time.Time) *APIKeyCreate {
 	_c.mutation.SetLastUsedAt(v)
@@ -387,6 +401,10 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.CursorDedicated(); !ok {
+		v := apikey.DefaultCursorDedicated
+		_c.mutation.SetCursorDedicated(v)
+	}
 	if _, ok := _c.mutation.Quota(); !ok {
 		v := apikey.DefaultQuota
 		_c.mutation.SetQuota(v)
@@ -456,6 +474,9 @@ func (_c *APIKeyCreate) check() error {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.CursorDedicated(); !ok {
+		return &ValidationError{Name: "cursor_dedicated", err: errors.New(`ent: missing required field "APIKey.cursor_dedicated"`)}
 	}
 	if _, ok := _c.mutation.Quota(); !ok {
 		return &ValidationError{Name: "quota", err: errors.New(`ent: missing required field "APIKey.quota"`)}
@@ -534,6 +555,10 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.CursorDedicated(); ok {
+		_spec.SetField(apikey.FieldCursorDedicated, field.TypeBool, value)
+		_node.CursorDedicated = value
 	}
 	if value, ok := _c.mutation.LastUsedAt(); ok {
 		_spec.SetField(apikey.FieldLastUsedAt, field.TypeTime, value)
@@ -790,6 +815,18 @@ func (u *APIKeyUpsert) SetStatus(v string) *APIKeyUpsert {
 // UpdateStatus sets the "status" field to the value that was provided on create.
 func (u *APIKeyUpsert) UpdateStatus() *APIKeyUpsert {
 	u.SetExcluded(apikey.FieldStatus)
+	return u
+}
+
+// SetCursorDedicated sets the "cursor_dedicated" field.
+func (u *APIKeyUpsert) SetCursorDedicated(v bool) *APIKeyUpsert {
+	u.Set(apikey.FieldCursorDedicated, v)
+	return u
+}
+
+// UpdateCursorDedicated sets the "cursor_dedicated" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateCursorDedicated() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldCursorDedicated)
 	return u
 }
 

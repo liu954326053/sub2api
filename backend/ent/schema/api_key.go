@@ -47,6 +47,9 @@ func (APIKey) Fields() []ent.Field {
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),
+		field.Bool("cursor_dedicated").
+			Default(false).
+			Comment("Whether this API key is dedicated to Cursor usage"),
 		field.Time("last_used_at").
 			Optional().
 			Nillable().
@@ -138,6 +141,7 @@ func (APIKey) Indexes() []ent.Index {
 		// key 字段已在 Fields() 中声明 Unique()，无需重复索引
 		index.Fields("user_id"),
 		index.Fields("group_id"),
+		index.Fields("user_id", "cursor_dedicated"),
 		index.Fields("status"),
 		index.Fields("deleted_at"),
 		index.Fields("last_used_at"),

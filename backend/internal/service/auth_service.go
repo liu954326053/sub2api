@@ -14,7 +14,9 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
+	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -74,6 +76,7 @@ type AuthService struct {
 	promoService       *PromoService
 	affiliateService   *AffiliateService
 	defaultSubAssigner DefaultSubscriptionAssigner
+	apiKeyService      *APIKeyService
 }
 
 type DefaultSubscriptionAssigner interface {
@@ -115,6 +118,10 @@ func NewAuthService(
 		affiliateService:   affiliateService,
 		defaultSubAssigner: defaultSubAssigner,
 	}
+}
+
+func (s *AuthService) SetAPIKeyService(apiKeyService *APIKeyService) {
+	s.apiKeyService = apiKeyService
 }
 
 func (s *AuthService) EntClient() *dbent.Client {
@@ -701,7 +708,6 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 					}
 				} else {
 					user = newUser
-					s.postAuthUserBootstrap(ctx, user, signupSource, false)
 					s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
 					s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
 					if invitationRedeemCode != nil {
@@ -709,6 +715,7 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 							return nil, nil, ErrInvitationCodeInvalid
 						}
 					}
+					s.postAuthUserBootstrap(ctx, user, signupSource, false)
 				}
 			}
 		} else {
@@ -833,6 +840,59 @@ func (s *AuthService) postAuthUserBootstrap(ctx context.Context, user *User, sig
 	if touchLogin {
 		s.touchUserLogin(ctx, user.ID)
 	}
+	s.createDefaultCursorBootstrapKeys(ctx, user.ID)
+}
+
+func (s *AuthService) createDefaultCursorBootstrapKeys(ctx context.Context, userID int64) {
+	if s == nil || s.apiKeyService == nil || s.apiKeyService.apiKeyRepo == nil || s.entClient == nil || userID <= 0 {
+		return
+	}
+	client := s.entClient
+	if tx := dbent.TxFromContext(ctx); tx != nil {
+		client = tx.Client()
+	}
+
+	defaults := []struct {
+		name     string
+		platform string
+		keyName  string
+	}{
+		{name: "Claude默认分组", platform: PlatformAnthropic, keyName: "Claude默认Key"},
+		{name: "OpenAI默认分组", platform: PlatformOpenAI, keyName: "OpenAI默认Key"},
+	}
+
+	for _, item := range defaults {
+		group, err := client.Group.Query().Where(
+			group.NameEQ(item.name),
+			group.PlatformEQ(item.platform),
+			group.StatusEQ(StatusActive),
+			group.DeletedAtIsNil(),
+		).Only(ctx)
+		if err != nil {
+			logger.LegacyPrintf("service.auth", "[Auth] Failed to load default group for bootstrap keys: user_id=%d group=%s platform=%s err=%v", userID, item.name, item.platform, err)
+			continue
+		}
+		exists, err := client.APIKey.Query().Where(
+			apikey.UserIDEQ(userID),
+			apikey.GroupIDEQ(group.ID),
+			apikey.DeletedAtIsNil(),
+		).Exist(ctx)
+		if err != nil {
+			logger.LegacyPrintf("service.auth", "[Auth] Failed to inspect default api key: user_id=%d group_id=%d err=%v", userID, group.ID, err)
+			continue
+		}
+		if exists {
+			continue
+		}
+		groupID := group.ID
+		if _, err := s.apiKeyService.Create(ctx, userID, CreateAPIKeyRequest{
+			Name:            item.keyName,
+			GroupID:         &groupID,
+			CursorDedicated: true,
+		}); err != nil {
+			logger.LegacyPrintf("service.auth", "[Auth] Failed to create default api key: user_id=%d group_id=%d err=%v", userID, group.ID, err)
+		}
+	}
 }
 
 func (s *AuthService) updateUserSignupSource(ctx context.Context, userID int64, signupSource string) {
@@ -842,7 +902,11 @@ func (s *AuthService) updateUserSignupSource(ctx context.Context, userID int64, 
 	if strings.TrimSpace(signupSource) == "" {
 		return
 	}
-	if err := s.entClient.User.UpdateOneID(userID).
+	client := s.entClient
+	if tx := dbent.TxFromContext(ctx); tx != nil {
+		client = tx.Client()
+	}
+	if err := client.User.UpdateOneID(userID).
 		SetSignupSource(signupSource).
 		Exec(ctx); err != nil {
 		logger.LegacyPrintf("service.auth", "[Auth] Failed to update signup source: user_id=%d source=%s err=%v", userID, signupSource, err)
@@ -854,7 +918,11 @@ func (s *AuthService) touchUserLogin(ctx context.Context, userID int64) {
 		return
 	}
 	now := time.Now().UTC()
-	if err := s.entClient.User.UpdateOneID(userID).
+	client := s.entClient
+	if tx := dbent.TxFromContext(ctx); tx != nil {
+		client = tx.Client()
+	}
+	if err := client.User.UpdateOneID(userID).
 		SetLastLoginAt(now).
 		SetLastActiveAt(now).
 		Exec(ctx); err != nil {

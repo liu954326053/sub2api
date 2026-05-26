@@ -10,6 +10,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -38,12 +39,14 @@ func (r *apiKeyRepository) activeQuery() *dbent.APIKeyQuery {
 }
 
 func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) error {
-	builder := r.client.APIKey.Create().
+	client := clientFromContext(ctx, r.client)
+	builder := client.APIKey.Create().
 		SetUserID(key.UserID).
 		SetKey(key.Key).
 		SetName(key.Name).
 		SetStatus(key.Status).
 		SetNillableGroupID(key.GroupID).
+		SetCursorDedicated(key.CursorDedicated).
 		SetNillableLastUsedAt(key.LastUsedAt).
 		SetQuota(key.Quota).
 		SetQuotaUsed(key.QuotaUsed).
@@ -70,7 +73,9 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 }
 
 func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIKey, error) {
-	m, err := r.activeQuery().
+	client := clientFromContext(ctx, r.client)
+	m, err := client.APIKey.Query().
+		Where(apikey.DeletedAtIsNil()).
 		Where(apikey.IDEQ(id)).
 		WithUser().
 		WithGroup().
@@ -213,6 +218,7 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 		SetRateLimit5h(key.RateLimit5h).
 		SetRateLimit1d(key.RateLimit1d).
 		SetRateLimit7d(key.RateLimit7d).
+		SetCursorDedicated(key.CursorDedicated).
 		SetUsage5h(key.Usage5h).
 		SetUsage1d(key.Usage1d).
 		SetUsage7d(key.Usage7d).
@@ -323,6 +329,9 @@ func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, param
 			q = q.Where(apikey.GroupIDEQ(*filters.GroupID))
 		}
 	}
+	if filters.CursorDedicated != nil {
+		q = q.Where(apikey.CursorDedicatedEQ(*filters.CursorDedicated))
+	}
 
 	total, err := q.Count(ctx)
 	if err != nil {
@@ -367,6 +376,13 @@ func (r *apiKeyRepository) VerifyOwnership(ctx context.Context, userID int64, ap
 func (r *apiKeyRepository) CountByUserID(ctx context.Context, userID int64) (int64, error) {
 	count, err := r.activeQuery().Where(apikey.UserIDEQ(userID)).Count(ctx)
 	return int64(count), err
+}
+
+func (r *apiKeyRepository) ExistsByUserIDAndGroupID(ctx context.Context, userID, groupID int64) (bool, error) {
+	client := clientFromContext(ctx, r.client)
+	return client.APIKey.Query().
+		Where(apikey.UserIDEQ(userID), apikey.GroupIDEQ(groupID), apikey.DeletedAtIsNil()).
+		Exist(ctx)
 }
 
 func (r *apiKeyRepository) ExistsByKey(ctx context.Context, key string) (bool, error) {
@@ -454,11 +470,31 @@ func (r *apiKeyRepository) SearchAPIKeys(ctx context.Context, userID int64, keyw
 
 // ClearGroupIDByGroupID 将指定分组的所有 API Key 的 group_id 设为 nil
 func (r *apiKeyRepository) ClearGroupIDByGroupID(ctx context.Context, groupID int64) (int64, error) {
-	n, err := r.client.APIKey.Update().
+	client := clientFromContext(ctx, r.client)
+	n, err := client.APIKey.Update().
 		Where(apikey.GroupIDEQ(groupID), apikey.DeletedAtIsNil()).
 		ClearGroupID().
 		Save(ctx)
 	return int64(n), err
+}
+
+func (r *apiKeyRepository) ClearCursorDedicatedByUserIDAndPlatform(ctx context.Context, userID int64, platform string, exceptID int64) error {
+	client := clientFromContext(ctx, r.client)
+	predicates := []predicate.APIKey{
+		apikey.UserIDEQ(userID),
+		apikey.CursorDedicatedEQ(true),
+		apikey.DeletedAtIsNil(),
+		apikey.HasGroupWith(group.PlatformEQ(platform)),
+	}
+	if exceptID > 0 {
+		predicates = append(predicates, apikey.IDNEQ(exceptID))
+	}
+	_, err := client.APIKey.Update().
+		Where(predicates...).
+		SetCursorDedicated(false).
+		SetUpdatedAt(time.Now()).
+		Save(ctx)
+	return err
 }
 
 // UpdateGroupIDByUserAndGroup 将用户下绑定 oldGroupID 的所有 Key 迁移到 newGroupID
@@ -618,29 +654,30 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		return nil
 	}
 	out := &service.APIKey{
-		ID:            m.ID,
-		UserID:        m.UserID,
-		Key:           m.Key,
-		Name:          m.Name,
-		Status:        m.Status,
-		IPWhitelist:   m.IPWhitelist,
-		IPBlacklist:   m.IPBlacklist,
-		LastUsedAt:    m.LastUsedAt,
-		CreatedAt:     m.CreatedAt,
-		UpdatedAt:     m.UpdatedAt,
-		GroupID:       m.GroupID,
-		Quota:         m.Quota,
-		QuotaUsed:     m.QuotaUsed,
-		ExpiresAt:     m.ExpiresAt,
-		RateLimit5h:   m.RateLimit5h,
-		RateLimit1d:   m.RateLimit1d,
-		RateLimit7d:   m.RateLimit7d,
-		Usage5h:       m.Usage5h,
-		Usage1d:       m.Usage1d,
-		Usage7d:       m.Usage7d,
-		Window5hStart: m.Window5hStart,
-		Window1dStart: m.Window1dStart,
-		Window7dStart: m.Window7dStart,
+		ID:              m.ID,
+		UserID:          m.UserID,
+		Key:             m.Key,
+		Name:            m.Name,
+		Status:          m.Status,
+		CursorDedicated: m.CursorDedicated,
+		IPWhitelist:     m.IPWhitelist,
+		IPBlacklist:     m.IPBlacklist,
+		LastUsedAt:      m.LastUsedAt,
+		CreatedAt:       m.CreatedAt,
+		UpdatedAt:       m.UpdatedAt,
+		GroupID:         m.GroupID,
+		Quota:           m.Quota,
+		QuotaUsed:       m.QuotaUsed,
+		ExpiresAt:       m.ExpiresAt,
+		RateLimit5h:     m.RateLimit5h,
+		RateLimit1d:     m.RateLimit1d,
+		RateLimit7d:     m.RateLimit7d,
+		Usage5h:         m.Usage5h,
+		Usage1d:         m.Usage1d,
+		Usage7d:         m.Usage7d,
+		Window5hStart:   m.Window5hStart,
+		Window1dStart:   m.Window1dStart,
+		Window7dStart:   m.Window7dStart,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)

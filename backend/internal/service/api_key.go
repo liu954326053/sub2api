@@ -45,6 +45,9 @@ type APIKey struct {
 	User                *User
 	Group               *Group
 
+	// Cursor 专用标记
+	CursorDedicated bool
+
 	// Quota fields
 	Quota     float64    // Quota limit in USD (0 = unlimited)
 	QuotaUsed float64    // Used quota amount
@@ -137,7 +140,8 @@ func (k *APIKey) EffectiveUsage7d() float64 {
 
 // APIKeyListFilters holds optional filtering parameters for listing API keys.
 type APIKeyListFilters struct {
-	Search  string
-	Status  string
-	GroupID *int64 // nil=不筛选, 0=无分组, >0=指定分组
+	Search          string
+	Status          string
+	GroupID         *int64 // nil=不筛选, 0=无分组, >0=指定分组
+	CursorDedicated *bool
 }

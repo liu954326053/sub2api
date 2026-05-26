@@ -203,7 +203,7 @@
                   />
                 </div>
                 <div v-if="row.reset_5h_at && formatResetTime(row.reset_5h_at)" class="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
-                  ⟳ {{ formatResetTime(row.reset_5h_at) }}
+                  �?{{ formatResetTime(row.reset_5h_at) }}
                 </div>
               </div>
               <!-- 1d window -->
@@ -231,7 +231,7 @@
                   />
                 </div>
                 <div v-if="row.reset_1d_at && formatResetTime(row.reset_1d_at)" class="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
-                  ⟳ {{ formatResetTime(row.reset_1d_at) }}
+                  �?{{ formatResetTime(row.reset_1d_at) }}
                 </div>
               </div>
               <!-- 7d window -->
@@ -259,7 +259,7 @@
                   />
                 </div>
                 <div v-if="row.reset_7d_at && formatResetTime(row.reset_7d_at)" class="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
-                  ⟳ {{ formatResetTime(row.reset_7d_at) }}
+                  �?{{ formatResetTime(row.reset_7d_at) }}
                 </div>
               </div>
               <!-- Reset button -->
@@ -437,6 +437,11 @@
               />
             </template>
           </Select>
+        </div>
+
+        <div class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5 dark:border-dark-700">
+          <label class="input-label mb-0">Cursor 专用</label>
+          <Toggle v-model="formData.cursor_dedicated" :disabled="!formData.group_id" />
         </div>
 
         <!-- Custom Key Section (only for create) -->
@@ -1045,7 +1050,7 @@
 </template>
 
 <script setup lang="ts">
-	import { ref, computed, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
+	import { ref, computed, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
 	import { useI18n } from 'vue-i18n'
 	import { useAppStore } from '@/stores/app'
 	import { useOnboardingStore } from '@/stores/onboarding'
@@ -1063,6 +1068,7 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import EmptyState from '@/components/common/EmptyState.vue'
 	import Select from '@/components/common/Select.vue'
 	import SearchInput from '@/components/common/SearchInput.vue'
+	import Toggle from '@/components/common/Toggle.vue'
 	import Icon from '@/components/icons/Icon.vue'
 	import UseKeyModal from '@/components/keys/UseKeyModal.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
@@ -1172,6 +1178,7 @@ const formData = ref({
   name: '',
   group_id: null as number | null,
   status: 'active' as 'active' | 'inactive',
+  cursor_dedicated: false,
   use_custom_key: false,
   custom_key: '',
   enable_ip_restriction: false,
@@ -1191,6 +1198,15 @@ const formData = ref({
 })
 
 // 自定义Key验证
+watch(
+  () => formData.value.group_id,
+  (groupId) => {
+    if (!groupId) {
+      formData.value.cursor_dedicated = false
+    }
+  }
+)
+
 const customKeyError = computed(() => {
   if (!formData.value.use_custom_key || !formData.value.custom_key) {
     return ''
@@ -1395,6 +1411,7 @@ const editKey = (key: ApiKey) => {
     name: key.name,
     group_id: key.group_id,
     status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
+    cursor_dedicated: key.cursor_dedicated,
     use_custom_key: false,
     custom_key: '',
     enable_ip_restriction: hasIPRestriction,
@@ -1546,6 +1563,7 @@ const handleSubmit = async () => {
         name: formData.value.name,
         group_id: formData.value.group_id,
         status: formData.value.status,
+        cursor_dedicated: formData.value.cursor_dedicated,
         ip_whitelist: ipWhitelist,
         ip_blacklist: ipBlacklist,
         quota: quota,
@@ -1565,7 +1583,8 @@ const handleSubmit = async () => {
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        formData.value.cursor_dedicated
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1584,11 +1603,6 @@ const handleSubmit = async () => {
   }
 }
 
-/**
- * 处理删除 API Key 的操作
- * 优化：错误处理改进，优先显示后端返回的具体错误消息（如权限不足等），
- * 若后端未返回消息则显示默认的国际化文本
- */
 const handleDelete = async () => {
   if (!selectedKey.value) return
 
@@ -1598,7 +1612,6 @@ const handleDelete = async () => {
     showDeleteDialog.value = false
     loadApiKeys()
   } catch (error: any) {
-    // 优先使用后端返回的错误消息，提供更具体的错误信息给用户
     const errorMsg = error?.message || t('keys.failedToDelete')
     appStore.showError(errorMsg)
   }
@@ -1612,6 +1625,7 @@ const closeModals = () => {
     name: '',
     group_id: null,
     status: 'active',
+    cursor_dedicated: false,
     use_custom_key: false,
     custom_key: '',
     enable_ip_restriction: false,

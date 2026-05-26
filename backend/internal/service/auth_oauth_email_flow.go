@@ -166,12 +166,12 @@ func (s *AuthService) RegisterOAuthEmailAccount(
 		slog.Error("oauth email register: userRepo.Create failed", "email", email, "signup_source", signupSource, "error", err.Error())
 		return nil, nil, ErrServiceUnavailable
 	}
-
 	tokenPair, err := s.GenerateTokenPair(ctx, user, "")
 	if err != nil {
 		_ = s.RollbackOAuthEmailAccountCreation(ctx, user.ID, "")
 		return nil, nil, fmt.Errorf("generate token pair: %w", err)
 	}
+	s.postAuthUserBootstrap(ctx, user, signupSource, false)
 	return tokenPair, user, nil
 }
 
@@ -247,12 +247,12 @@ func (s *AuthService) RegisterVerifiedOAuthEmailAccount(
 		}
 		return nil, nil, ErrServiceUnavailable
 	}
-
 	tokenPair, err := s.GenerateTokenPair(ctx, user, "")
 	if err != nil {
 		_ = s.RollbackOAuthEmailAccountCreation(ctx, user.ID, "")
 		return nil, nil, fmt.Errorf("generate token pair: %w", err)
 	}
+	s.postAuthUserBootstrap(ctx, user, signupSource, false)
 	return tokenPair, user, nil
 }
 
@@ -280,7 +280,7 @@ func (s *AuthService) FinalizeOAuthEmailAccount(
 		}
 	}
 
-	s.updateOAuthSignupSource(ctx, user.ID, signupSource)
+	s.postAuthUserBootstrap(ctx, user, signupSource, false)
 	grantPlan := s.resolveSignupGrantPlan(ctx, signupSource)
 	s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
 	s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
