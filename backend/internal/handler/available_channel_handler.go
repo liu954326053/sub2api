@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -26,35 +28,21 @@ import (
 type AvailableChannelHandler struct {
 	channelService *service.ChannelService
 	apiKeyService  *service.APIKeyService
+	gatewayService *service.GatewayService
 	settingService *service.SettingService
-}
-
-var cursorModelSquareDefaults = map[string][]string{
-	"anthropic": {
-		"claude-opus-4-6",
-		"claude-sonnet-4-6",
-		"claude-sonnet-4-5",
-		"claude-haiku-4-5",
-	},
-	"openai": {
-		"gpt-5.4",
-		"gpt-5.4-mini",
-		"gpt-5.2-codex",
-		"gpt-5.2",
-		"gpt-5.1-codex",
-		"gpt-5.1",
-	},
 }
 
 // NewAvailableChannelHandler 创建用户侧可用渠道 handler。
 func NewAvailableChannelHandler(
 	channelService *service.ChannelService,
 	apiKeyService *service.APIKeyService,
+	gatewayService *service.GatewayService,
 	settingService *service.SettingService,
 ) *AvailableChannelHandler {
 	return &AvailableChannelHandler{
 		channelService: channelService,
 		apiKeyService:  apiKeyService,
+		gatewayService: gatewayService,
 		settingService: settingService,
 	}
 }
@@ -259,49 +247,30 @@ func (h *AvailableChannelHandler) CursorModels(c *gin.Context) {
 		return
 	}
 
-	channels, err := h.channelService.ListAvailable(c.Request.Context())
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-
 	seen := make(map[string]struct{})
 	models := make([]cursorModelSquareModel, 0)
-	for _, ch := range channels {
-		if ch.Status != service.StatusActive {
+
+	for groupID, group := range allowedGroups {
+		platform := normalizeCursorModelPlatform(group.Platform)
+		if platform != service.PlatformOpenAI && platform != service.PlatformAnthropic {
 			continue
 		}
-		channelGroupIDs := make(map[int64]struct{}, len(ch.Groups))
-		for _, group := range ch.Groups {
-			channelGroupIDs[group.ID] = struct{}{}
-		}
-		for _, model := range ch.SupportedModels {
-			for groupID, group := range allowedGroups {
-				if _, ok := channelGroupIDs[groupID]; !ok {
-					continue
-				}
-				platform := normalizeCursorModelPlatform(group.Platform)
-				modelPlatform := normalizeCursorModelPlatform(model.Platform)
-				if modelPlatform != platform {
-					continue
-				}
-				key := fmt.Sprintf("%d:%s:%s", groupID, modelPlatform, strings.ToLower(model.Name))
-				if _, ok := seen[key]; ok {
-					continue
-				}
-				seen[key] = struct{}{}
-				models = append(models, buildCursorModelSquareModel(
-					model.Name,
-					modelPlatform,
-					groupID,
-					group.Name,
-					toUserPricing(applyPricingMultiplier(model.Pricing, groupMultipliers[groupID])),
-				))
+		modelNames := h.cursorModelNamesForGroup(c.Request.Context(), groupID, platform)
+		for _, modelName := range modelNames {
+			key := fmt.Sprintf("%d:%s:%s", groupID, platform, strings.ToLower(modelName))
+			if _, ok := seen[key]; ok {
+				continue
 			}
+			seen[key] = struct{}{}
+			models = append(models, buildCursorModelSquareModel(
+				modelName,
+				platform,
+				groupID,
+				group.Name,
+				toUserPricing(applyPricingMultiplier(h.channelService.DisplayPricingForModel(modelName), groupMultipliers[groupID])),
+			))
 		}
 	}
-
-	models = append(models, cursorModelSquareFallbackModels(allowedGroups, seen, h.channelService.DisplayPricingForModel, groupMultipliers)...)
 
 	sort.SliceStable(models, func(i, j int) bool {
 		if models[i].Platform != models[j].Platform {
@@ -311,6 +280,16 @@ func (h *AvailableChannelHandler) CursorModels(c *gin.Context) {
 	})
 
 	response.Success(c, cursorModelSquareResponse{Keys: outKeys, Models: models})
+}
+
+func (h *AvailableChannelHandler) cursorModelNamesForGroup(ctx context.Context, groupID int64, platform string) []string {
+	if h.gatewayService != nil {
+		modelNames := h.gatewayService.GetAvailableModels(ctx, &groupID, platform)
+		if len(modelNames) > 0 {
+			return modelNames
+		}
+	}
+	return cursorModelDefaultNames(platform)
 }
 
 func (h *AvailableChannelHandler) cursorModelGroupMultipliers(ctx context.Context, userID int64, groups map[int64]service.Group) (map[int64]float64, error) {
@@ -340,31 +319,23 @@ func normalizeCursorModelPlatform(platform string) string {
 	return platform
 }
 
-func cursorModelSquareFallbackModels(groups map[int64]service.Group, existing map[string]struct{}, pricingForModel func(string) *service.ChannelModelPricing, multipliers map[int64]float64) []cursorModelSquareModel {
-	models := make([]cursorModelSquareModel, 0)
-	for groupID, group := range groups {
-		platform := normalizeCursorModelPlatform(group.Platform)
-		for _, modelName := range cursorModelSquareDefaults[platform] {
-			key := fmt.Sprintf("%d:%s:%s", groupID, platform, strings.ToLower(modelName))
-			if _, ok := existing[key]; ok {
-				continue
-			}
-			existing[key] = struct{}{}
-			var pricing *service.ChannelModelPricing
-			if pricingForModel != nil {
-				pricing = pricingForModel(modelName)
-			}
-			pricing = applyPricingMultiplier(pricing, multipliers[groupID])
-			models = append(models, buildCursorModelSquareModel(
-				modelName,
-				platform,
-				groupID,
-				group.Name,
-				toUserPricing(pricing),
-			))
+func cursorModelDefaultNames(platform string) []string {
+	switch normalizeCursorModelPlatform(platform) {
+	case service.PlatformOpenAI:
+		out := make([]string, 0, len(openai.DefaultModels))
+		for _, model := range openai.DefaultModels {
+			out = append(out, model.ID)
 		}
+		return out
+	case service.PlatformAnthropic:
+		out := make([]string, 0, len(claude.DefaultModels))
+		for _, model := range claude.DefaultModels {
+			out = append(out, model.ID)
+		}
+		return out
+	default:
+		return nil
 	}
-	return models
 }
 
 func applyPricingMultiplier(p *service.ChannelModelPricing, multiplier float64) *service.ChannelModelPricing {
