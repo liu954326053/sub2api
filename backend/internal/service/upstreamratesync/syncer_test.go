@@ -98,7 +98,7 @@ func TestSyncConnection_Updated(t *testing.T) {
 func TestSyncConnection_Unchanged(t *testing.T) {
 	fixture := newSyncFixture(t,
 		[]any{keyItem("sk-alpha-0001", "group-a", 1.0)},
-		[]ScopedAccount{{ID: 11, APIKey: "sk-alpha-0001", RateMultiplier: floatPtr(1.0), HasSnapshot: true}},
+		[]ScopedAccount{{ID: 11, APIKey: "sk-alpha-0001", RateMultiplier: floatPtr(1.0)}},
 	)
 	run, err := fixture.syncer.SyncConnection(context.Background(), 1)
 	require.NoError(t, err)
@@ -106,35 +106,35 @@ func TestSyncConnection_Unchanged(t *testing.T) {
 	require.Equal(t, 0, run.AccountsUpdated)
 	require.Equal(t, 1, run.AccountsUnchanged)
 	require.Equal(t, DetailActionUnchanged, run.Details[0].Action)
-	require.Equal(t, 0, fixture.gateway.writeCount(), "值不变跳过写回")
+	require.Equal(t, 1, fixture.gateway.writeCount(), "倍率不变也要刷新快照时间戳（保鲜）")
 }
 
 func TestSyncConnection_UnchangedHealsMissingSnapshot(t *testing.T) {
-	// 快照被账号编辑的身份失效清除后，即使倍率未变化也要自愈重写快照，
-	// 否则账号永远停留在"未探测"。
+	// 快照被账号编辑的身份失效清除后，下一轮 unchanged 同步同样会重写快照，
+	// 账号不会停留在"未探测"。
 	fixture := newSyncFixture(t,
 		[]any{keyItem("sk-alpha-0001", "group-a", 1.0)},
-		[]ScopedAccount{{ID: 11, APIKey: "sk-alpha-0001", RateMultiplier: floatPtr(1.0), HasSnapshot: false}},
+		[]ScopedAccount{{ID: 11, APIKey: "sk-alpha-0001", RateMultiplier: floatPtr(1.0)}},
 	)
 	run, err := fixture.syncer.SyncConnection(context.Background(), 1)
 	require.NoError(t, err)
 	require.Equal(t, SyncStatusSuccess, run.Status)
-	require.Equal(t, 0, run.AccountsUpdated, "自愈不计入 updated")
+	require.Equal(t, 0, run.AccountsUpdated, "倍率未变化不计入 updated")
 	require.Equal(t, 1, run.AccountsUnchanged)
 	require.Equal(t, DetailActionUnchanged, run.Details[0].Action)
-	require.Equal(t, 1, fixture.gateway.writeCount(), "重写一次快照自愈")
+	require.Equal(t, 1, fixture.gateway.writeCount())
 }
 
 func TestSyncConnection_NilOldRateTreatedAsOne(t *testing.T) {
 	// nil → 1.0 折算：上游 1.0 与 nil 账号相等，记 unchanged。
 	fixture := newSyncFixture(t,
 		[]any{keyItem("sk-alpha-0001", "group-a", 1.0)},
-		[]ScopedAccount{{ID: 11, APIKey: "sk-alpha-0001", HasSnapshot: true}},
+		[]ScopedAccount{{ID: 11, APIKey: "sk-alpha-0001"}},
 	)
 	run, err := fixture.syncer.SyncConnection(context.Background(), 1)
 	require.NoError(t, err)
 	require.Equal(t, 1, run.AccountsUnchanged)
-	require.Equal(t, 0, fixture.gateway.writeCount())
+	require.Equal(t, 1, fixture.gateway.writeCount(), "倍率不变也要刷新快照时间戳（保鲜）")
 }
 
 func TestSyncConnection_ThresholdSkipped(t *testing.T) {

@@ -115,9 +115,6 @@ type ScopedAccount struct {
 	// LastSyncedRate 是 extra.last_synced_rate：本服务上次写入的值。
 	// 非 nil 且与当前 RateMultiplier 不一致 → 管理员手改过（manual_override）。
 	LastSyncedRate *float64
-	// HasSnapshot 表示 extra.upstream_billing_probe 快照是否存在。
-	// 快照可能被账号编辑按身份失效清除；unchanged 账号缺快照时需要自愈重写。
-	HasSnapshot bool
 }
 
 // AccountSnapshot 是待写入 accounts.extra.upstream_billing_probe 的同构快照
