@@ -962,6 +962,7 @@ func (g *upstreamRateSyncAccountGateway) ListScopedAccounts(ctx context.Context,
 				APIKey:         account.GetCredential("api_key"),
 				RateMultiplier: account.RateMultiplier,
 				LastSyncedRate: lastSyncedRateFromExtra(account.Extra),
+				HasSnapshot:    hasUpstreamBillingProbeSnapshot(account.Extra),
 			})
 		}
 	}
@@ -996,6 +997,15 @@ func (g *upstreamRateSyncAccountGateway) WriteSyncedRate(ctx context.Context, ac
 		LastAttemptAt: snapshot.ReceivedAt,
 		NextProbeAt:   snapshot.NextProbeAt,
 	})
+}
+
+// hasUpstreamBillingProbeSnapshot 报告 extra 中是否存在上游倍率快照。
+func hasUpstreamBillingProbeSnapshot(extra map[string]any) bool {
+	if extra == nil {
+		return false
+	}
+	_, ok := extra[UpstreamBillingProbeExtraKey]
+	return ok
 }
 
 // lastSyncedRateFromExtra 解析 extra.last_synced_rate（三方比对基准）。

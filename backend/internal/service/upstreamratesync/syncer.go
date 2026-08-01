@@ -238,7 +238,15 @@ func (s *Syncer) applyWriteback(ctx context.Context, conn *Connection, account *
 	}
 
 	// 值不变跳过（nil→1.0、负数→1.0 折算后比较）。
+	// 例外：快照缺失（曾被账号编辑的身份失效清除）时自愈重写一次快照，
+	// 倍率不变、不计入 updated，避免账号永远停留在"未探测"。
 	if equalSyncedRate(oldEffective, newRate) {
+		if !account.HasSnapshot {
+			snapshot := buildAccountSnapshot(key.Group, s.now(), interval)
+			if err := s.accounts.WriteSyncedRate(ctx, account.ID, newRate, snapshot); err != nil {
+				return nil, err
+			}
+		}
 		detail.Action = DetailActionUnchanged
 		return &detail, nil
 	}

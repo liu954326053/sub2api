@@ -624,22 +624,19 @@ func lockAndMergeAccountProbeExtra(ctx context.Context, client *dbent.Client, ac
 	} {
 		delete(extra, key)
 	}
-	probeExplicitlyDisabled := false
 	probeAccount := account.Platform == service.PlatformOpenAI && account.Type == service.AccountTypeAPIKey
 	if probeAccount && explicitProbeEnabled != nil {
 		extra[service.UpstreamBillingProbeEnabledExtraKey] = *explicitProbeEnabled
-		probeExplicitlyDisabled = !*explicitProbeEnabled
 	} else if probeAccount {
 		if enabled, ok, err := decodeAccountExtraJSON(currentEnabled); err != nil {
 			return nil, err
 		} else if ok {
 			extra[service.UpstreamBillingProbeEnabledExtraKey] = enabled
-			if value, isBool := enabled.(bool); isBool && !value {
-				probeExplicitlyDisabled = true
-			}
 		}
 	}
-	if identityUnchanged && !probeExplicitlyDisabled {
+	// 快照由上游倍率同步维护，与旧探测开关解耦：关闭自动探测只影响旧 probe
+	// runner 资格，不再清除已同步的快照（否则快照会在每次编辑后被反复误清）。
+	if identityUnchanged {
 		if snapshot, ok, err := decodeAccountExtraJSON(currentSnapshot); err != nil {
 			return nil, err
 		} else if ok {
@@ -708,29 +705,23 @@ func (r *accountRepository) UpdateCredentials(ctx context.Context, id int64, cre
 		SET
 			credentials = $1::jsonb,
 			extra = CASE
-				-- 凭证整体未变化 ⇒ Ollama 组身份必然未变化；顶层 DISTINCT 守卫防止
-				-- 非 Ollama 账号的无变化持久化误清探测快照或重写 NULL extra。
+				-- 凭证整体未变化 ⇒ 上游身份必然未变化；顶层 DISTINCT 守卫防止
+				-- 无变化持久化误清探测快照或重写 NULL extra。
 				-- 探测快照剥离覆盖全部 relay 平台（openai/anthropic/gemini/grok），
-				-- 与上游倍率同步的账号匹配范围保持一致。
+				-- 且只在"上游身份键"（api_key / base_url）变化时触发：
+				-- model_mapping 等无关字段的编辑不得误清同步写入的快照。
 				WHEN platform IN ('openai', 'anthropic', 'gemini', 'grok')
 					AND type = 'apikey'
 					AND credentials IS DISTINCT FROM $1::jsonb
 					AND (
 						credentials -> 'api_key' IS DISTINCT FROM $1::jsonb -> 'api_key'
-						OR NOT (
-							`+ollamaCloudBaseURLMatchesSQL("credentials ->> 'base_url'")+`
-							AND `+ollamaCloudBaseURLMatchesSQL("$1::jsonb ->> 'base_url'")+`
-						)
+						OR credentials ->> 'base_url' IS DISTINCT FROM $1::jsonb ->> 'base_url'
 					)
 				THEN COALESCE(extra, '{}'::jsonb)
 					- 'upstream_billing_probe'
 					- 'ollama_cloud_usage_session'
 					- 'ollama_cloud_usage_auto_refresh'
 					- 'ollama_cloud_usage_snapshot'
-				WHEN platform = 'openai'
-					AND type = 'apikey'
-					AND credentials IS DISTINCT FROM $1::jsonb
-				THEN COALESCE(extra, '{}'::jsonb) - 'upstream_billing_probe'
 				ELSE extra
 			END,
 			updated_at = NOW()
@@ -2460,7 +2451,9 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 		return err
 	}
 
-	clearProbeSnapshot := upstreamBillingProbeExplicitlyDisabled(updates) || upstreamBillingProbeSnapshotClearRequested(updates)
+	// 显式清除（nil）才剥离快照；仅关闭开关（enabled=false）不再清除——
+	// 快照由上游倍率同步维护，与旧探测开关解耦。
+	clearProbeSnapshot := upstreamBillingProbeSnapshotClearRequested(updates)
 	durableSchedulerChange := shouldEnqueueSchedulerOutboxForExtraUpdates(updates) || clearProbeSnapshot
 	baseCtx := ctx
 	contextTx := dbent.TxFromContext(ctx)
@@ -2681,11 +2674,6 @@ func isSchedulerNeutralExtraKey(key string) bool {
 	return false
 }
 
-func upstreamBillingProbeExplicitlyDisabled(extra map[string]any) bool {
-	enabled, ok := extra[service.UpstreamBillingProbeEnabledExtraKey].(bool)
-	return ok && !enabled
-}
-
 func upstreamBillingProbeSnapshotClearRequested(extra map[string]any) bool {
 	value, ok := extra[service.UpstreamBillingProbeExtraKey]
 	return ok && value == nil
@@ -2797,7 +2785,7 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 			extraExpression += " || $" + itoa(idx) + "::jsonb"
 			args = append(args, payload)
 			idx++
-			if upstreamBillingProbeExplicitlyDisabled(updates.Extra) || upstreamBillingProbeSnapshotClearRequested(updates.Extra) {
+			if upstreamBillingProbeSnapshotClearRequested(updates.Extra) {
 				extraExpression = "(" + extraExpression + ") - 'upstream_billing_probe'"
 			}
 			if ollamaCloudUsageSnapshotClearRequested(updates.Extra) {

@@ -143,15 +143,16 @@ func TestLockAndMergeAccountProbeExtraProtectsOllamaManagedFields(t *testing.T) 
 	}
 }
 
-func TestUpdateExtraExplicitProbeDisableRemovesSnapshot(t *testing.T) {
+func TestUpdateExtraExplicitProbeDisableKeepsSnapshot(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 	t.Cleanup(func() { _ = client.Close() })
 
+	// 仅关闭旧探测开关不应剥离同步写入的快照（快照与旧 probe 开关解耦）。
 	mock.ExpectBegin()
-	mock.ExpectExec(`(?s)UPDATE accounts SET extra = .* - 'upstream_billing_probe'`).
+	mock.ExpectExec(`UPDATE accounts SET extra = COALESCE\(extra, '\{\}'::jsonb\) \|+ \$1::jsonb, updated_at = NOW\(\) WHERE id = \$2`).
 		WithArgs(`{"upstream_billing_probe_enabled":false}`, int64(27)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).
@@ -202,7 +203,7 @@ func TestBulkUpdateNilProbeRemovesKeyInsteadOfWritingJSONNull(t *testing.T) {
 	require.Contains(t, normalizeSQLWhitespace(exec.execQueries[0]), "- 'upstream_billing_probe'")
 }
 
-func TestBulkUpdateDisablingProbeRemovesSnapshot(t *testing.T) {
+func TestBulkUpdateDisablingProbeKeepsSnapshot(t *testing.T) {
 	exec := &recordingSQLExecutor{result: rowsAffectedResult(1)}
 	repo := newAccountRepositoryWithSQL(nil, exec, nil)
 
@@ -212,7 +213,7 @@ func TestBulkUpdateDisablingProbeRemovesSnapshot(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotEmpty(t, exec.execQueries)
-	require.Contains(t, normalizeSQLWhitespace(exec.execQueries[0]), "- 'upstream_billing_probe'")
+	require.NotContains(t, normalizeSQLWhitespace(exec.execQueries[0]), "- 'upstream_billing_probe'")
 	payload, ok := exec.execArgs[0][0].([]byte)
 	require.True(t, ok)
 	require.Equal(t, `{"upstream_billing_probe_enabled":false}`, string(payload))
