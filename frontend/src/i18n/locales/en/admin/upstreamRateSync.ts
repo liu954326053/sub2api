@@ -32,6 +32,7 @@ export default {
       add: 'Add connection',
       empty: 'No upstream connections configured yet.',
       neverSynced: 'Never synced',
+      balance: 'Balance',
       toggleEnabled: 'Toggle connection {name}',
       columns: {
         name: 'Name',

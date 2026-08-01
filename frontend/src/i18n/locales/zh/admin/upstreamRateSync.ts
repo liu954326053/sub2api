@@ -32,6 +32,7 @@ export default {
       add: '新增连接',
       empty: '尚未配置上游连接。',
       neverSynced: '从未同步',
+      balance: '余额',
       toggleEnabled: '切换连接 {name} 的启用状态',
       columns: {
         name: '名称',

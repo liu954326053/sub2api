@@ -43,6 +43,8 @@ const (
 	FieldLastStatus = "last_status"
 	// FieldLastError holds the string denoting the last_error field in the database.
 	FieldLastError = "last_error"
+	// FieldLastBalance holds the string denoting the last_balance field in the database.
+	FieldLastBalance = "last_balance"
 	// EdgeSyncRuns holds the string denoting the sync_runs edge name in mutations.
 	EdgeSyncRuns = "sync_runs"
 	// Table holds the table name of the upstreamconnection in the database.
@@ -73,6 +75,7 @@ var Columns = []string{
 	FieldLastSyncAt,
 	FieldLastStatus,
 	FieldLastError,
+	FieldLastBalance,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -203,6 +206,11 @@ func ByLastStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByLastError orders the results by the last_error field.
 func ByLastError(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastError, opts...).ToFunc()
+}
+
+// ByLastBalance orders the results by the last_balance field.
+func ByLastBalance(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLastBalance, opts...).ToFunc()
 }
 
 // BySyncRunsCount orders the results by sync_runs count.

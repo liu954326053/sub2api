@@ -21,6 +21,7 @@ export interface UpstreamConnection {
   last_sync_at?: string | null
   last_status?: UpstreamSyncStatus | null
   last_error?: string | null
+  last_balance?: number | null
   has_credentials: boolean
   token_expires_at?: string | null
   created_at: string
@@ -44,6 +45,7 @@ export interface UpstreamConnectionSubmit {
 export interface UpstreamConnectionTestResult {
   keys_found: number
   accounts_matched: number
+  balance?: number | null
 }
 
 export interface UpstreamSyncRunDetail {

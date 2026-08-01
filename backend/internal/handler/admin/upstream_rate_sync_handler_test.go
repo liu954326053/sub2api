@@ -121,6 +121,10 @@ func (r *fakeUpstreamConnRepo) UpdateSyncResult(_ context.Context, id int64, syn
 	return nil
 }
 
+func (r *fakeUpstreamConnRepo) UpdateBalance(_ context.Context, id int64, balance float64) error {
+	return nil
+}
+
 func (r *fakeUpstreamConnRepo) UpdateTokens(_ context.Context, id int64, accessTokenEncrypted string, refreshTokenEncrypted *string, tokenExpiresAt time.Time) error {
 	return nil
 }

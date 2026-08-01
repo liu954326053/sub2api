@@ -100,6 +100,7 @@ type upstreamRateSyncConnectionResponse struct {
 	LastSyncAt      *time.Time `json:"last_sync_at,omitempty"`
 	LastStatus      string     `json:"last_status,omitempty"`
 	LastError       string     `json:"last_error,omitempty"`
+	LastBalance     *float64   `json:"last_balance,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
@@ -133,6 +134,7 @@ func toUpstreamRateSyncConnectionResponse(conn *upstreamratesync.Connection) ups
 		LastSyncAt:      conn.LastSyncAt,
 		LastStatus:      conn.LastStatus,
 		LastError:       conn.LastError,
+		LastBalance:     conn.LastBalance,
 		CreatedAt:       conn.CreatedAt,
 		UpdatedAt:       conn.UpdatedAt,
 	}

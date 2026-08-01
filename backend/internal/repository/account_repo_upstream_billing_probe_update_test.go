@@ -48,7 +48,7 @@ func TestLockAndMergeAccountProbeExtraUsesCurrentDatabaseSnapshot(t *testing.T) 
 			wantEnabled: true,
 		},
 		{
-			name:              "current explicit disable clears snapshot",
+			name:              "probe disable keeps snapshot",
 			identityUnchanged: true,
 			databaseEnabled:   []byte(`false`),
 			databaseSnapshot:  []byte(`{"status":"ok"}`),
@@ -56,7 +56,9 @@ func TestLockAndMergeAccountProbeExtraUsesCurrentDatabaseSnapshot(t *testing.T) 
 				service.UpstreamBillingProbeEnabledExtraKey: true,
 				service.UpstreamBillingProbeExtraKey:        map[string]any{"status": "stale"},
 			},
-			wantEnabled: false,
+			// 关闭旧探测开关只影响 runner 资格，同步写入的快照保留（取数据库当前值）。
+			wantSnapshot: map[string]any{"status": "ok"},
+			wantEnabled:  false,
 		},
 		{
 			name:              "missing database snapshot is not resurrected from stale input",
@@ -150,15 +152,11 @@ func TestUpdateExtraExplicitProbeDisableKeepsSnapshot(t *testing.T) {
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 	t.Cleanup(func() { _ = client.Close() })
 
-	// 仅关闭旧探测开关不应剥离同步写入的快照（快照与旧 probe 开关解耦）。
-	mock.ExpectBegin()
-	mock.ExpectExec(`UPDATE accounts SET extra = COALESCE\(extra, '\{\}'::jsonb\) \|+ \$1::jsonb, updated_at = NOW\(\) WHERE id = \$2`).
+	// 仅关闭旧探测开关不应剥离同步写入的快照（快照与旧 probe 开关解耦）；
+	// enabled 键属调度中性，本路径无事务、无 outbox 事件。
+	mock.ExpectExec(`UPDATE accounts SET extra = COALESCE\(extra, '\{\}'::jsonb\) \|+ \$1::jsonb, updated_at = NOW\(\) WHERE id = \$2 AND deleted_at IS NULL`).
 		WithArgs(`{"upstream_billing_probe_enabled":false}`, int64(27)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).
-		WithArgs(service.SchedulerOutboxEventAccountChanged, int64(27), nil, nil, sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit()
 	repo := newAccountRepositoryWithSQL(client, db, nil)
 
 	err = repo.UpdateExtra(context.Background(), 27, map[string]any{service.UpstreamBillingProbeEnabledExtraKey: false})
@@ -306,7 +304,8 @@ func TestUpdateWithUpstreamBillingProbeEnabledRollsBackWhenOutboxFails(t *testin
 
 	require.EqualError(t, err, "outbox failed")
 	require.Equal(t, false, account.Extra[service.UpstreamBillingProbeEnabledExtraKey])
-	require.NotContains(t, account.Extra, service.UpstreamBillingProbeExtraKey)
+	// 关闭旧探测开关不再清除同步写入的快照（快照与旧 probe 开关解耦）。
+	require.Contains(t, account.Extra, service.UpstreamBillingProbeExtraKey)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -319,13 +318,13 @@ func TestUpdateExtraRollsBackWhenOutboxFails(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(`(?s)UPDATE accounts SET extra = .* - 'upstream_billing_probe'`).
-		WithArgs(`{"upstream_billing_probe_enabled":false}`, int64(27)).
+		WithArgs(`{"upstream_billing_probe":null}`, int64(27)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox")).WillReturnError(errors.New("outbox failed"))
 	mock.ExpectRollback()
 
 	repo := newAccountRepositoryWithSQL(client, db, nil)
-	err = repo.UpdateExtra(context.Background(), 27, map[string]any{service.UpstreamBillingProbeEnabledExtraKey: false})
+	err = repo.UpdateExtra(context.Background(), 27, map[string]any{service.UpstreamBillingProbeExtraKey: nil})
 
 	require.EqualError(t, err, "outbox failed")
 	require.NoError(t, mock.ExpectationsWereMet())

@@ -81,6 +81,10 @@ func (UpstreamConnection) Fields() []ent.Field {
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "text"}).
 			Comment("最近一次错误摘要（脱敏，不含 token/密码）"),
+		field.Float("last_balance").
+			Optional().
+			Nillable().
+			Comment("最近一次同步读取到的上游账号余额（USD），nil 表示未获取过"),
 	}
 }
 

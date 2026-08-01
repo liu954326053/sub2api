@@ -145,8 +145,9 @@ type AccountGateway interface {
 
 // TestResult 连接测试结果（对应管理 API 的 keys_found/accounts_matched）。
 type TestResult struct {
-	KeysFound       int `json:"keys_found"`
-	AccountsMatched int `json:"accounts_matched"`
+	KeysFound       int      `json:"keys_found"`
+	AccountsMatched int      `json:"accounts_matched"`
+	Balance         *float64 `json:"balance,omitempty"` // 上游账号余额（USD），获取失败为 nil
 }
 
 // Connection 上游连接：保存一个上游 sub2api 实例的地址与鉴权（密文）。
@@ -171,6 +172,8 @@ type Connection struct {
 	LastSyncAt *time.Time
 	LastStatus string // success | partial | failed，空表示尚未同步
 	LastError  string // 最近一次错误摘要（脱敏，不含 token/密码）
+
+	LastBalance *float64 // 最近一次同步读取到的上游账号余额（USD），nil 表示未获取过
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -242,6 +245,8 @@ type ConnectionRepository interface {
 	ListEnabled(ctx context.Context) ([]*Connection, error)
 	// UpdateSyncResult 同步结束后更新 last_sync_at / last_status / last_error（脱敏摘要，空串清除）。
 	UpdateSyncResult(ctx context.Context, id int64, syncedAt time.Time, status string, lastError string) error
+	// UpdateBalance 更新上游余额快照（nil 表示清除/获取失败时保持旧值由调用方决定）。
+	UpdateBalance(ctx context.Context, id int64, balance float64) error
 	// UpdateTokens refresh 轮转成功后持久化最新 token：access token 密文 + 到期时间；
 	// refreshTokenEncrypted 为 nil 表示清除 refresh token（refresh 严格一次性轮转，
 	// 必须串行刷新并立即持久化，禁止并发刷新导致新 token 丢失）。

@@ -159,6 +159,17 @@ func (c *upstreamClient) refresh(ctx context.Context, refreshToken string) (*tok
 	return &tokenPair{AccessToken: data.AccessToken, RefreshToken: data.RefreshToken, ExpiresIn: data.ExpiresIn}, nil
 }
 
+// fetchBalance GET /api/v1/user/profile（用户 JWT 鉴权），返回上游账号余额（USD）。
+func (c *upstreamClient) fetchBalance(ctx context.Context, accessToken string) (float64, error) {
+	var data struct {
+		Balance float64 `json:"balance"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/user/profile", nil, accessToken, &data); err != nil {
+		return 0, err
+	}
+	return data.Balance, nil
+}
+
 // listKeysPage GET /api/v1/keys?page=N&page_size=100（用户 JWT 鉴权）。
 func (c *upstreamClient) listKeysPage(ctx context.Context, accessToken string, page int) (*upstreamKeysPage, error) {
 	path := fmt.Sprintf("/api/v1/keys?page=%d&page_size=%d", page, upstreamKeysPageSize)

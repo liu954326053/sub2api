@@ -45,6 +45,8 @@ type UpstreamConnection struct {
 	LastStatus string `json:"last_status,omitempty"`
 	// 最近一次错误摘要（脱敏，不含 token/密码）
 	LastError string `json:"last_error,omitempty"`
+	// 最近一次同步读取到的上游账号余额（USD），nil 表示未获取过
+	LastBalance *float64 `json:"last_balance,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UpstreamConnectionQuery when eager-loading is set.
 	Edges        UpstreamConnectionEdges `json:"edges"`
@@ -76,6 +78,8 @@ func (*UpstreamConnection) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case upstreamconnection.FieldEnabled:
 			values[i] = new(sql.NullBool)
+		case upstreamconnection.FieldLastBalance:
+			values[i] = new(sql.NullFloat64)
 		case upstreamconnection.FieldID, upstreamconnection.FieldIntervalMinutes:
 			values[i] = new(sql.NullInt64)
 		case upstreamconnection.FieldName, upstreamconnection.FieldBaseURL, upstreamconnection.FieldAuthMode, upstreamconnection.FieldCredentialsEncrypted, upstreamconnection.FieldAccessTokenEncrypted, upstreamconnection.FieldRefreshTokenEncrypted, upstreamconnection.FieldLastStatus, upstreamconnection.FieldLastError:
@@ -189,6 +193,13 @@ func (_m *UpstreamConnection) assignValues(columns []string, values []any) error
 			} else if value.Valid {
 				_m.LastError = value.String
 			}
+		case upstreamconnection.FieldLastBalance:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field last_balance", values[i])
+			} else if value.Valid {
+				_m.LastBalance = new(float64)
+				*_m.LastBalance = value.Float64
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -272,6 +283,11 @@ func (_m *UpstreamConnection) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("last_error=")
 	builder.WriteString(_m.LastError)
+	builder.WriteString(", ")
+	if v := _m.LastBalance; v != nil {
+		builder.WriteString("last_balance=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteByte(')')
 	return builder.String()
 }

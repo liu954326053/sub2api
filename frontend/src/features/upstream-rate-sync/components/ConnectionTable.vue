@@ -86,6 +86,13 @@
           <span class="rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-700 dark:bg-dark-700 dark:text-dark-200">
             {{ t(`admin.upstreamRateSync.authMode.${row.auth_mode}`) }}
           </span>
+          <span
+            v-if="row.last_balance != null"
+            class="rounded-full bg-emerald-50 px-2 py-0.5 font-mono font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+            :data-test="`balance-${row.id}`"
+          >
+            {{ t('admin.upstreamRateSync.connections.balance') }} ${{ row.last_balance.toFixed(2) }}
+          </span>
           <span>{{ t('admin.upstreamRateSync.connections.columns.interval') }}: {{ row.interval_minutes }}m</span>
           <span>
             {{ t('admin.upstreamRateSync.connections.columns.lastSyncAt') }}:

@@ -252,6 +252,33 @@ func (_u *UpstreamConnectionUpdate) ClearLastError() *UpstreamConnectionUpdate {
 	return _u
 }
 
+// SetLastBalance sets the "last_balance" field.
+func (_u *UpstreamConnectionUpdate) SetLastBalance(v float64) *UpstreamConnectionUpdate {
+	_u.mutation.ResetLastBalance()
+	_u.mutation.SetLastBalance(v)
+	return _u
+}
+
+// SetNillableLastBalance sets the "last_balance" field if the given value is not nil.
+func (_u *UpstreamConnectionUpdate) SetNillableLastBalance(v *float64) *UpstreamConnectionUpdate {
+	if v != nil {
+		_u.SetLastBalance(*v)
+	}
+	return _u
+}
+
+// AddLastBalance adds value to the "last_balance" field.
+func (_u *UpstreamConnectionUpdate) AddLastBalance(v float64) *UpstreamConnectionUpdate {
+	_u.mutation.AddLastBalance(v)
+	return _u
+}
+
+// ClearLastBalance clears the value of the "last_balance" field.
+func (_u *UpstreamConnectionUpdate) ClearLastBalance() *UpstreamConnectionUpdate {
+	_u.mutation.ClearLastBalance()
+	return _u
+}
+
 // AddSyncRunIDs adds the "sync_runs" edge to the UpstreamSyncRun entity by IDs.
 func (_u *UpstreamConnectionUpdate) AddSyncRunIDs(ids ...int64) *UpstreamConnectionUpdate {
 	_u.mutation.AddSyncRunIDs(ids...)
@@ -428,6 +455,15 @@ func (_u *UpstreamConnectionUpdate) sqlSave(ctx context.Context) (_node int, err
 	}
 	if _u.mutation.LastErrorCleared() {
 		_spec.ClearField(upstreamconnection.FieldLastError, field.TypeString)
+	}
+	if value, ok := _u.mutation.LastBalance(); ok {
+		_spec.SetField(upstreamconnection.FieldLastBalance, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedLastBalance(); ok {
+		_spec.AddField(upstreamconnection.FieldLastBalance, field.TypeFloat64, value)
+	}
+	if _u.mutation.LastBalanceCleared() {
+		_spec.ClearField(upstreamconnection.FieldLastBalance, field.TypeFloat64)
 	}
 	if _u.mutation.SyncRunsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -717,6 +753,33 @@ func (_u *UpstreamConnectionUpdateOne) ClearLastError() *UpstreamConnectionUpdat
 	return _u
 }
 
+// SetLastBalance sets the "last_balance" field.
+func (_u *UpstreamConnectionUpdateOne) SetLastBalance(v float64) *UpstreamConnectionUpdateOne {
+	_u.mutation.ResetLastBalance()
+	_u.mutation.SetLastBalance(v)
+	return _u
+}
+
+// SetNillableLastBalance sets the "last_balance" field if the given value is not nil.
+func (_u *UpstreamConnectionUpdateOne) SetNillableLastBalance(v *float64) *UpstreamConnectionUpdateOne {
+	if v != nil {
+		_u.SetLastBalance(*v)
+	}
+	return _u
+}
+
+// AddLastBalance adds value to the "last_balance" field.
+func (_u *UpstreamConnectionUpdateOne) AddLastBalance(v float64) *UpstreamConnectionUpdateOne {
+	_u.mutation.AddLastBalance(v)
+	return _u
+}
+
+// ClearLastBalance clears the value of the "last_balance" field.
+func (_u *UpstreamConnectionUpdateOne) ClearLastBalance() *UpstreamConnectionUpdateOne {
+	_u.mutation.ClearLastBalance()
+	return _u
+}
+
 // AddSyncRunIDs adds the "sync_runs" edge to the UpstreamSyncRun entity by IDs.
 func (_u *UpstreamConnectionUpdateOne) AddSyncRunIDs(ids ...int64) *UpstreamConnectionUpdateOne {
 	_u.mutation.AddSyncRunIDs(ids...)
@@ -923,6 +986,15 @@ func (_u *UpstreamConnectionUpdateOne) sqlSave(ctx context.Context) (_node *Upst
 	}
 	if _u.mutation.LastErrorCleared() {
 		_spec.ClearField(upstreamconnection.FieldLastError, field.TypeString)
+	}
+	if value, ok := _u.mutation.LastBalance(); ok {
+		_spec.SetField(upstreamconnection.FieldLastBalance, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedLastBalance(); ok {
+		_spec.AddField(upstreamconnection.FieldLastBalance, field.TypeFloat64, value)
+	}
+	if _u.mutation.LastBalanceCleared() {
+		_spec.ClearField(upstreamconnection.FieldLastBalance, field.TypeFloat64)
 	}
 	if _u.mutation.SyncRunsCleared() {
 		edge := &sqlgraph.EdgeSpec{

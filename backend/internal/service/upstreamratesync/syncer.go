@@ -134,6 +134,14 @@ func (s *Syncer) sync(ctx context.Context, conn *Connection, run *SyncRun) (stri
 			return err
 		}
 		keys = fetched
+		// 上游余额快照：尽力而为，失败不影响同步主流程（保留旧值）。
+		if balance, balErr := client.fetchBalance(ctx, accessToken); balErr == nil {
+			if updateErr := s.connRepo.UpdateBalance(ctx, conn.ID, balance); updateErr != nil {
+				logger.LegacyPrintf(syncLogPrefix, "update_balance_failed: connection_id=%d err=%v", conn.ID, updateErr)
+			}
+		} else {
+			logger.LegacyPrintf(syncLogPrefix, "fetch_balance_failed: connection_id=%d err=%v", conn.ID, balErr)
+		}
 		return nil
 	})
 	if err != nil {
@@ -285,12 +293,20 @@ func (s *Syncer) TestConnection(ctx context.Context, connectionID int64) (*TestR
 
 	client := newUpstreamClient(conn.BaseURL, s.httpClient)
 	var page *upstreamKeysPage
+	var balance *float64
 	err = s.withReauth(ctx, conn, client, func(accessToken string) error {
 		data, err := client.listKeysPage(ctx, accessToken, 1)
 		if err != nil {
 			return err
 		}
 		page = data
+		// 余额尽力而为：取到则顺手更新连接快照，失败不影响测试结果。
+		if value, balErr := client.fetchBalance(ctx, accessToken); balErr == nil {
+			balance = &value
+			if updateErr := s.connRepo.UpdateBalance(ctx, conn.ID, value); updateErr != nil {
+				logger.LegacyPrintf(syncLogPrefix, "update_balance_failed: connection_id=%d err=%v", conn.ID, updateErr)
+			}
+		}
 		return nil
 	})
 	if err != nil {
@@ -298,7 +314,7 @@ func (s *Syncer) TestConnection(ctx context.Context, connectionID int64) (*TestR
 		return nil, publicSyncError(err)
 	}
 
-	result := &TestResult{KeysFound: int(page.Total)}
+	result := &TestResult{KeysFound: int(page.Total), Balance: balance}
 	if result.KeysFound == 0 {
 		result.KeysFound = len(page.Items)
 	}

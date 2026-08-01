@@ -1591,6 +1591,7 @@ var (
 		{Name: "last_sync_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "last_status", Type: field.TypeString, Nullable: true, Size: 20},
 		{Name: "last_error", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "last_balance", Type: field.TypeFloat64, Nullable: true},
 	}
 	// UpstreamConnectionsTable holds the schema information for the "upstream_connections" table.
 	UpstreamConnectionsTable = &schema.Table{

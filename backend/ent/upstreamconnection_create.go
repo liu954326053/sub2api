@@ -195,6 +195,20 @@ func (_c *UpstreamConnectionCreate) SetNillableLastError(v *string) *UpstreamCon
 	return _c
 }
 
+// SetLastBalance sets the "last_balance" field.
+func (_c *UpstreamConnectionCreate) SetLastBalance(v float64) *UpstreamConnectionCreate {
+	_c.mutation.SetLastBalance(v)
+	return _c
+}
+
+// SetNillableLastBalance sets the "last_balance" field if the given value is not nil.
+func (_c *UpstreamConnectionCreate) SetNillableLastBalance(v *float64) *UpstreamConnectionCreate {
+	if v != nil {
+		_c.SetLastBalance(*v)
+	}
+	return _c
+}
+
 // AddSyncRunIDs adds the "sync_runs" edge to the UpstreamSyncRun entity by IDs.
 func (_c *UpstreamConnectionCreate) AddSyncRunIDs(ids ...int64) *UpstreamConnectionCreate {
 	_c.mutation.AddSyncRunIDs(ids...)
@@ -388,6 +402,10 @@ func (_c *UpstreamConnectionCreate) createSpec() (*UpstreamConnection, *sqlgraph
 	if value, ok := _c.mutation.LastError(); ok {
 		_spec.SetField(upstreamconnection.FieldLastError, field.TypeString, value)
 		_node.LastError = value
+	}
+	if value, ok := _c.mutation.LastBalance(); ok {
+		_spec.SetField(upstreamconnection.FieldLastBalance, field.TypeFloat64, value)
+		_node.LastBalance = &value
 	}
 	if nodes := _c.mutation.SyncRunsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -658,6 +676,30 @@ func (u *UpstreamConnectionUpsert) UpdateLastError() *UpstreamConnectionUpsert {
 // ClearLastError clears the value of the "last_error" field.
 func (u *UpstreamConnectionUpsert) ClearLastError() *UpstreamConnectionUpsert {
 	u.SetNull(upstreamconnection.FieldLastError)
+	return u
+}
+
+// SetLastBalance sets the "last_balance" field.
+func (u *UpstreamConnectionUpsert) SetLastBalance(v float64) *UpstreamConnectionUpsert {
+	u.Set(upstreamconnection.FieldLastBalance, v)
+	return u
+}
+
+// UpdateLastBalance sets the "last_balance" field to the value that was provided on create.
+func (u *UpstreamConnectionUpsert) UpdateLastBalance() *UpstreamConnectionUpsert {
+	u.SetExcluded(upstreamconnection.FieldLastBalance)
+	return u
+}
+
+// AddLastBalance adds v to the "last_balance" field.
+func (u *UpstreamConnectionUpsert) AddLastBalance(v float64) *UpstreamConnectionUpsert {
+	u.Add(upstreamconnection.FieldLastBalance, v)
+	return u
+}
+
+// ClearLastBalance clears the value of the "last_balance" field.
+func (u *UpstreamConnectionUpsert) ClearLastBalance() *UpstreamConnectionUpsert {
+	u.SetNull(upstreamconnection.FieldLastBalance)
 	return u
 }
 
@@ -941,6 +983,34 @@ func (u *UpstreamConnectionUpsertOne) UpdateLastError() *UpstreamConnectionUpser
 func (u *UpstreamConnectionUpsertOne) ClearLastError() *UpstreamConnectionUpsertOne {
 	return u.Update(func(s *UpstreamConnectionUpsert) {
 		s.ClearLastError()
+	})
+}
+
+// SetLastBalance sets the "last_balance" field.
+func (u *UpstreamConnectionUpsertOne) SetLastBalance(v float64) *UpstreamConnectionUpsertOne {
+	return u.Update(func(s *UpstreamConnectionUpsert) {
+		s.SetLastBalance(v)
+	})
+}
+
+// AddLastBalance adds v to the "last_balance" field.
+func (u *UpstreamConnectionUpsertOne) AddLastBalance(v float64) *UpstreamConnectionUpsertOne {
+	return u.Update(func(s *UpstreamConnectionUpsert) {
+		s.AddLastBalance(v)
+	})
+}
+
+// UpdateLastBalance sets the "last_balance" field to the value that was provided on create.
+func (u *UpstreamConnectionUpsertOne) UpdateLastBalance() *UpstreamConnectionUpsertOne {
+	return u.Update(func(s *UpstreamConnectionUpsert) {
+		s.UpdateLastBalance()
+	})
+}
+
+// ClearLastBalance clears the value of the "last_balance" field.
+func (u *UpstreamConnectionUpsertOne) ClearLastBalance() *UpstreamConnectionUpsertOne {
+	return u.Update(func(s *UpstreamConnectionUpsert) {
+		s.ClearLastBalance()
 	})
 }
 
@@ -1390,6 +1460,34 @@ func (u *UpstreamConnectionUpsertBulk) UpdateLastError() *UpstreamConnectionUpse
 func (u *UpstreamConnectionUpsertBulk) ClearLastError() *UpstreamConnectionUpsertBulk {
 	return u.Update(func(s *UpstreamConnectionUpsert) {
 		s.ClearLastError()
+	})
+}
+
+// SetLastBalance sets the "last_balance" field.
+func (u *UpstreamConnectionUpsertBulk) SetLastBalance(v float64) *UpstreamConnectionUpsertBulk {
+	return u.Update(func(s *UpstreamConnectionUpsert) {
+		s.SetLastBalance(v)
+	})
+}
+
+// AddLastBalance adds v to the "last_balance" field.
+func (u *UpstreamConnectionUpsertBulk) AddLastBalance(v float64) *UpstreamConnectionUpsertBulk {
+	return u.Update(func(s *UpstreamConnectionUpsert) {
+		s.AddLastBalance(v)
+	})
+}
+
+// UpdateLastBalance sets the "last_balance" field to the value that was provided on create.
+func (u *UpstreamConnectionUpsertBulk) UpdateLastBalance() *UpstreamConnectionUpsertBulk {
+	return u.Update(func(s *UpstreamConnectionUpsert) {
+		s.UpdateLastBalance()
+	})
+}
+
+// ClearLastBalance clears the value of the "last_balance" field.
+func (u *UpstreamConnectionUpsertBulk) ClearLastBalance() *UpstreamConnectionUpsertBulk {
+	return u.Update(func(s *UpstreamConnectionUpsert) {
+		s.ClearLastBalance()
 	})
 }
 

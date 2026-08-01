@@ -169,6 +169,16 @@ func (r *upstreamConnectionRepository) UpdateSyncResult(ctx context.Context, id 
 	return nil
 }
 
+func (r *upstreamConnectionRepository) UpdateBalance(ctx context.Context, id int64, balance float64) error {
+	client := clientFromContext(ctx, r.client)
+	if err := client.UpstreamConnection.UpdateOneID(id).
+		SetLastBalance(balance).
+		Exec(ctx); err != nil {
+		return translatePersistenceError(err, upstreamratesync.ErrConnectionNotFound, nil)
+	}
+	return nil
+}
+
 // UpdateTokens refresh 轮转成功后持久化最新 token。
 // refreshTokenEncrypted 为 nil 表示清除 refresh token（token 模式无 refresh）。
 func (r *upstreamConnectionRepository) UpdateTokens(ctx context.Context, id int64, accessTokenEncrypted string, refreshTokenEncrypted *string, tokenExpiresAt time.Time) error {
@@ -205,6 +215,7 @@ func entToUpstreamConnection(row *dbent.UpstreamConnection) *upstreamratesync.Co
 		LastSyncAt:            row.LastSyncAt,
 		LastStatus:            row.LastStatus,
 		LastError:             row.LastError,
+		LastBalance:           row.LastBalance,
 		CreatedAt:             row.CreatedAt,
 		UpdatedAt:             row.UpdatedAt,
 	}

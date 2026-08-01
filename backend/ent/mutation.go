@@ -42115,6 +42115,8 @@ type UpstreamConnectionMutation struct {
 	last_sync_at            *time.Time
 	last_status             *string
 	last_error              *string
+	last_balance            *float64
+	addlast_balance         *float64
 	clearedFields           map[string]struct{}
 	sync_runs               map[int64]struct{}
 	removedsync_runs        map[int64]struct{}
@@ -42837,6 +42839,76 @@ func (m *UpstreamConnectionMutation) ResetLastError() {
 	delete(m.clearedFields, upstreamconnection.FieldLastError)
 }
 
+// SetLastBalance sets the "last_balance" field.
+func (m *UpstreamConnectionMutation) SetLastBalance(f float64) {
+	m.last_balance = &f
+	m.addlast_balance = nil
+}
+
+// LastBalance returns the value of the "last_balance" field in the mutation.
+func (m *UpstreamConnectionMutation) LastBalance() (r float64, exists bool) {
+	v := m.last_balance
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastBalance returns the old "last_balance" field's value of the UpstreamConnection entity.
+// If the UpstreamConnection object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UpstreamConnectionMutation) OldLastBalance(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastBalance is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastBalance requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastBalance: %w", err)
+	}
+	return oldValue.LastBalance, nil
+}
+
+// AddLastBalance adds f to the "last_balance" field.
+func (m *UpstreamConnectionMutation) AddLastBalance(f float64) {
+	if m.addlast_balance != nil {
+		*m.addlast_balance += f
+	} else {
+		m.addlast_balance = &f
+	}
+}
+
+// AddedLastBalance returns the value that was added to the "last_balance" field in this mutation.
+func (m *UpstreamConnectionMutation) AddedLastBalance() (r float64, exists bool) {
+	v := m.addlast_balance
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearLastBalance clears the value of the "last_balance" field.
+func (m *UpstreamConnectionMutation) ClearLastBalance() {
+	m.last_balance = nil
+	m.addlast_balance = nil
+	m.clearedFields[upstreamconnection.FieldLastBalance] = struct{}{}
+}
+
+// LastBalanceCleared returns if the "last_balance" field was cleared in this mutation.
+func (m *UpstreamConnectionMutation) LastBalanceCleared() bool {
+	_, ok := m.clearedFields[upstreamconnection.FieldLastBalance]
+	return ok
+}
+
+// ResetLastBalance resets all changes to the "last_balance" field.
+func (m *UpstreamConnectionMutation) ResetLastBalance() {
+	m.last_balance = nil
+	m.addlast_balance = nil
+	delete(m.clearedFields, upstreamconnection.FieldLastBalance)
+}
+
 // AddSyncRunIDs adds the "sync_runs" edge to the UpstreamSyncRun entity by ids.
 func (m *UpstreamConnectionMutation) AddSyncRunIDs(ids ...int64) {
 	if m.sync_runs == nil {
@@ -42925,7 +42997,7 @@ func (m *UpstreamConnectionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UpstreamConnectionMutation) Fields() []string {
-	fields := make([]string, 0, 14)
+	fields := make([]string, 0, 15)
 	if m.created_at != nil {
 		fields = append(fields, upstreamconnection.FieldCreatedAt)
 	}
@@ -42968,6 +43040,9 @@ func (m *UpstreamConnectionMutation) Fields() []string {
 	if m.last_error != nil {
 		fields = append(fields, upstreamconnection.FieldLastError)
 	}
+	if m.last_balance != nil {
+		fields = append(fields, upstreamconnection.FieldLastBalance)
+	}
 	return fields
 }
 
@@ -43004,6 +43079,8 @@ func (m *UpstreamConnectionMutation) Field(name string) (ent.Value, bool) {
 		return m.LastStatus()
 	case upstreamconnection.FieldLastError:
 		return m.LastError()
+	case upstreamconnection.FieldLastBalance:
+		return m.LastBalance()
 	}
 	return nil, false
 }
@@ -43041,6 +43118,8 @@ func (m *UpstreamConnectionMutation) OldField(ctx context.Context, name string) 
 		return m.OldLastStatus(ctx)
 	case upstreamconnection.FieldLastError:
 		return m.OldLastError(ctx)
+	case upstreamconnection.FieldLastBalance:
+		return m.OldLastBalance(ctx)
 	}
 	return nil, fmt.Errorf("unknown UpstreamConnection field %s", name)
 }
@@ -43148,6 +43227,13 @@ func (m *UpstreamConnectionMutation) SetField(name string, value ent.Value) erro
 		}
 		m.SetLastError(v)
 		return nil
+	case upstreamconnection.FieldLastBalance:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastBalance(v)
+		return nil
 	}
 	return fmt.Errorf("unknown UpstreamConnection field %s", name)
 }
@@ -43159,6 +43245,9 @@ func (m *UpstreamConnectionMutation) AddedFields() []string {
 	if m.addinterval_minutes != nil {
 		fields = append(fields, upstreamconnection.FieldIntervalMinutes)
 	}
+	if m.addlast_balance != nil {
+		fields = append(fields, upstreamconnection.FieldLastBalance)
+	}
 	return fields
 }
 
@@ -43169,6 +43258,8 @@ func (m *UpstreamConnectionMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case upstreamconnection.FieldIntervalMinutes:
 		return m.AddedIntervalMinutes()
+	case upstreamconnection.FieldLastBalance:
+		return m.AddedLastBalance()
 	}
 	return nil, false
 }
@@ -43184,6 +43275,13 @@ func (m *UpstreamConnectionMutation) AddField(name string, value ent.Value) erro
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddIntervalMinutes(v)
+		return nil
+	case upstreamconnection.FieldLastBalance:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLastBalance(v)
 		return nil
 	}
 	return fmt.Errorf("unknown UpstreamConnection numeric field %s", name)
@@ -43213,6 +43311,9 @@ func (m *UpstreamConnectionMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(upstreamconnection.FieldLastError) {
 		fields = append(fields, upstreamconnection.FieldLastError)
+	}
+	if m.FieldCleared(upstreamconnection.FieldLastBalance) {
+		fields = append(fields, upstreamconnection.FieldLastBalance)
 	}
 	return fields
 }
@@ -43248,6 +43349,9 @@ func (m *UpstreamConnectionMutation) ClearField(name string) error {
 		return nil
 	case upstreamconnection.FieldLastError:
 		m.ClearLastError()
+		return nil
+	case upstreamconnection.FieldLastBalance:
+		m.ClearLastBalance()
 		return nil
 	}
 	return fmt.Errorf("unknown UpstreamConnection nullable field %s", name)
@@ -43298,6 +43402,9 @@ func (m *UpstreamConnectionMutation) ResetField(name string) error {
 		return nil
 	case upstreamconnection.FieldLastError:
 		m.ResetLastError()
+		return nil
+	case upstreamconnection.FieldLastBalance:
+		m.ResetLastBalance()
 		return nil
 	}
 	return fmt.Errorf("unknown UpstreamConnection field %s", name)

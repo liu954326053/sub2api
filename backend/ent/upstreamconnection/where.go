@@ -120,6 +120,11 @@ func LastError(v string) predicate.UpstreamConnection {
 	return predicate.UpstreamConnection(sql.FieldEQ(FieldLastError, v))
 }
 
+// LastBalance applies equality check predicate on the "last_balance" field. It's identical to LastBalanceEQ.
+func LastBalance(v float64) predicate.UpstreamConnection {
+	return predicate.UpstreamConnection(sql.FieldEQ(FieldLastBalance, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.UpstreamConnection {
 	return predicate.UpstreamConnection(sql.FieldEQ(FieldCreatedAt, v))
@@ -873,6 +878,56 @@ func LastErrorEqualFold(v string) predicate.UpstreamConnection {
 // LastErrorContainsFold applies the ContainsFold predicate on the "last_error" field.
 func LastErrorContainsFold(v string) predicate.UpstreamConnection {
 	return predicate.UpstreamConnection(sql.FieldContainsFold(FieldLastError, v))
+}
+
+// LastBalanceEQ applies the EQ predicate on the "last_balance" field.
+func LastBalanceEQ(v float64) predicate.UpstreamConnection {
+	return predicate.UpstreamConnection(sql.FieldEQ(FieldLastBalance, v))
+}
+
+// LastBalanceNEQ applies the NEQ predicate on the "last_balance" field.
+func LastBalanceNEQ(v float64) predicate.UpstreamConnection {
+	return predicate.UpstreamConnection(sql.FieldNEQ(FieldLastBalance, v))
+}
+
+// LastBalanceIn applies the In predicate on the "last_balance" field.
+func LastBalanceIn(vs ...float64) predicate.UpstreamConnection {
+	return predicate.UpstreamConnection(sql.FieldIn(FieldLastBalance, vs...))
+}
+
+// LastBalanceNotIn applies the NotIn predicate on the "last_balance" field.
+func LastBalanceNotIn(vs ...float64) predicate.UpstreamConnection {
+	return predicate.UpstreamConnection(sql.FieldNotIn(FieldLastBalance, vs...))
+}
+
+// LastBalanceGT applies the GT predicate on the "last_balance" field.
+func LastBalanceGT(v float64) predicate.UpstreamConnection {
+	return predicate.UpstreamConnection(sql.FieldGT(FieldLastBalance, v))
+}
+
+// LastBalanceGTE applies the GTE predicate on the "last_balance" field.
+func LastBalanceGTE(v float64) predicate.UpstreamConnection {
+	return predicate.UpstreamConnection(sql.FieldGTE(FieldLastBalance, v))
+}
+
+// LastBalanceLT applies the LT predicate on the "last_balance" field.
+func LastBalanceLT(v float64) predicate.UpstreamConnection {
+	return predicate.UpstreamConnection(sql.FieldLT(FieldLastBalance, v))
+}
+
+// LastBalanceLTE applies the LTE predicate on the "last_balance" field.
+func LastBalanceLTE(v float64) predicate.UpstreamConnection {
+	return predicate.UpstreamConnection(sql.FieldLTE(FieldLastBalance, v))
+}
+
+// LastBalanceIsNil applies the IsNil predicate on the "last_balance" field.
+func LastBalanceIsNil() predicate.UpstreamConnection {
+	return predicate.UpstreamConnection(sql.FieldIsNull(FieldLastBalance))
+}
+
+// LastBalanceNotNil applies the NotNil predicate on the "last_balance" field.
+func LastBalanceNotNil() predicate.UpstreamConnection {
+	return predicate.UpstreamConnection(sql.FieldNotNull(FieldLastBalance))
 }
 
 // HasSyncRuns applies the HasEdge predicate on the "sync_runs" edge.

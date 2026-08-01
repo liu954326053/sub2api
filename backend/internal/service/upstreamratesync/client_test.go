@@ -104,6 +104,15 @@ func (r *stubConnectionRepo) UpdateSyncResult(_ context.Context, id int64, synce
 	return nil
 }
 
+func (r *stubConnectionRepo) UpdateBalance(_ context.Context, id int64, balance float64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if conn, ok := r.conns[id]; ok {
+		conn.LastBalance = &balance
+	}
+	return nil
+}
+
 func (r *stubConnectionRepo) UpdateTokens(_ context.Context, id int64, accessTokenEncrypted string, refreshTokenEncrypted *string, tokenExpiresAt time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
