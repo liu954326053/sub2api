@@ -20,6 +20,7 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
+	"github.com/Wei-Shaw/sub2api/internal/service/upstreamratesync"
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
@@ -158,7 +159,11 @@ func (s *SettingService) SetUpstreamBillingProbeSettings(ctx context.Context, se
 }
 
 func defaultUpstreamBillingProbeSettings() *UpstreamBillingProbeSettings {
-	return &UpstreamBillingProbeSettings{Enabled: true, IntervalMinutes: upstreamBillingProbeDefaultIntervalMinutes}
+	// 默认关闭：该 runner 已被上游倍率同步（/admin/upstream-rate-sync）取代，
+	// 保留此开关仅供手动启用。两者禁止同时启用（双生产者互斥：都会写
+	// accounts.extra.upstream_billing_probe，同时启用以新同步为准）。
+	// 已有显式设置的用户不受影响（存储的 JSON 覆盖本默认值）。
+	return &UpstreamBillingProbeSettings{Enabled: false, IntervalMinutes: upstreamBillingProbeDefaultIntervalMinutes}
 }
 
 func normalizeUpstreamBillingProbeSettings(settings *UpstreamBillingProbeSettings) {
@@ -916,4 +921,107 @@ func safeProbeError(err error) string {
 		return ErrUpstreamBillingProbeUnavailable.Error()
 	}
 	return "probe_failed"
+}
+
+// ---- 上游倍率同步账号写回适配器（openspec add-upstream-rate-sync）----
+
+// upstreamRateSyncAccountGateway 把 AccountRepository 适配为
+// upstreamratesync.AccountGateway：匹配复用 ListByPlatform + credentials 读取，
+// 写回复用 BulkUpdate（rate_multiplier + extra.last_synced_rate）与
+// UpdateUpstreamBillingProbeSnapshot（同构快照，含网络身份校验）。
+type upstreamRateSyncAccountGateway struct {
+	accountRepo AccountRepository
+}
+
+// NewUpstreamRateSyncAccountGateway 创建同步引擎的账号写回适配器。
+func NewUpstreamRateSyncAccountGateway(accountRepo AccountRepository) upstreamratesync.AccountGateway {
+	return &upstreamRateSyncAccountGateway{accountRepo: accountRepo}
+}
+
+func (g *upstreamRateSyncAccountGateway) ListScopedAccounts(ctx context.Context, scopeBaseURL string) ([]upstreamratesync.ScopedAccount, error) {
+	accounts, err := g.accountRepo.ListByPlatform(ctx, PlatformOpenAI)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]upstreamratesync.ScopedAccount, 0, len(accounts))
+	for i := range accounts {
+		account := &accounts[i]
+		if account.Type != AccountTypeAPIKey {
+			continue
+		}
+		baseURL, err := upstreamratesync.NormalizeBaseURL(account.GetOpenAIBaseURL())
+		if err != nil || baseURL != scopeBaseURL {
+			continue
+		}
+		out = append(out, upstreamratesync.ScopedAccount{
+			ID:             account.ID,
+			APIKey:         account.GetOpenAIApiKey(),
+			RateMultiplier: account.RateMultiplier,
+			LastSyncedRate: lastSyncedRateFromExtra(account.Extra),
+		})
+	}
+	return out, nil
+}
+
+func (g *upstreamRateSyncAccountGateway) WriteSyncedRate(ctx context.Context, accountID int64, rate float64, snapshot *upstreamratesync.AccountSnapshot) error {
+	if snapshot == nil {
+		return ErrAccountNilInput
+	}
+	account, err := g.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	if _, err := g.accountRepo.BulkUpdate(ctx, []int64{accountID}, AccountBulkUpdate{
+		RateMultiplier: &rate,
+		Extra:          map[string]any{upstreamratesync.LastSyncedRateExtraKey: rate},
+	}); err != nil {
+		return err
+	}
+	writer, ok := g.accountRepo.(upstreamBillingProbeSnapshotWriter)
+	if !ok {
+		return ErrUpstreamBillingProbeUnavailable
+	}
+	receivedAt := snapshot.ReceivedAt
+	freshUntil := snapshot.FreshUntil
+	return writer.UpdateUpstreamBillingProbeSnapshot(ctx, account, &UpstreamBillingProbeSnapshot{
+		Status:        UpstreamBillingProbeStatusOK,
+		Data:          snapshot.Data,
+		ReceivedAt:    &receivedAt,
+		FreshUntil:    &freshUntil,
+		LastAttemptAt: snapshot.ReceivedAt,
+		NextProbeAt:   snapshot.NextProbeAt,
+	})
+}
+
+// lastSyncedRateFromExtra 解析 extra.last_synced_rate（三方比对基准）。
+func lastSyncedRateFromExtra(extra map[string]any) *float64 {
+	if extra == nil {
+		return nil
+	}
+	value, ok := extra[upstreamratesync.LastSyncedRateExtraKey]
+	if !ok || value == nil {
+		return nil
+	}
+	switch v := value.(type) {
+	case float64:
+		return &v
+	case float32:
+		parsed := float64(v)
+		return &parsed
+	case int:
+		parsed := float64(v)
+		return &parsed
+	case int64:
+		parsed := float64(v)
+		return &parsed
+	case json.Number:
+		if parsed, err := v.Float64(); err == nil {
+			return &parsed
+		}
+	case string:
+		if parsed, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+			return &parsed
+		}
+	}
+	return nil
 }

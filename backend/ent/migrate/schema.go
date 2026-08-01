@@ -901,6 +901,7 @@ var (
 		{Name: "name", Type: field.TypeString, Size: 100},
 		{Name: "description", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "rate_multiplier", Type: field.TypeFloat64, Default: 1, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "billing_mode", Type: field.TypeString, Size: 20, Default: "group_multiplier"},
 		{Name: "peak_rate_enabled", Type: field.TypeBool, Default: false},
 		{Name: "peak_start", Type: field.TypeString, Size: 5, Default: ""},
 		{Name: "peak_end", Type: field.TypeString, Size: 5, Default: ""},
@@ -957,22 +958,22 @@ var (
 			{
 				Name:    "group_status",
 				Unique:  false,
-				Columns: []*schema.Column{GroupsColumns[12]},
+				Columns: []*schema.Column{GroupsColumns[13]},
 			},
 			{
 				Name:    "group_platform",
 				Unique:  false,
-				Columns: []*schema.Column{GroupsColumns[14]},
+				Columns: []*schema.Column{GroupsColumns[15]},
 			},
 			{
 				Name:    "group_subscription_type",
 				Unique:  false,
-				Columns: []*schema.Column{GroupsColumns[15]},
+				Columns: []*schema.Column{GroupsColumns[16]},
 			},
 			{
 				Name:    "group_is_exclusive",
 				Unique:  false,
-				Columns: []*schema.Column{GroupsColumns[11]},
+				Columns: []*schema.Column{GroupsColumns[12]},
 			},
 			{
 				Name:    "group_deleted_at",
@@ -982,12 +983,12 @@ var (
 			{
 				Name:    "group_sort_order",
 				Unique:  false,
-				Columns: []*schema.Column{GroupsColumns[42]},
+				Columns: []*schema.Column{GroupsColumns[43]},
 			},
 			{
 				Name:    "idx_groups_duplicate_operation_id_active",
 				Unique:  true,
-				Columns: []*schema.Column{GroupsColumns[13]},
+				Columns: []*schema.Column{GroupsColumns[14]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "duplicate_operation_id IS NOT NULL AND deleted_at IS NULL",
 				},
@@ -1573,6 +1574,78 @@ var (
 		Columns:    TLSFingerprintProfilesColumns,
 		PrimaryKey: []*schema.Column{TLSFingerprintProfilesColumns[0]},
 	}
+	// UpstreamConnectionsColumns holds the columns for the "upstream_connections" table.
+	UpstreamConnectionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "base_url", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "auth_mode", Type: field.TypeEnum, Enums: []string{"password", "token"}},
+		{Name: "credentials_encrypted", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "access_token_encrypted", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "refresh_token_encrypted", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "token_expires_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "enabled", Type: field.TypeBool, Default: false},
+		{Name: "interval_minutes", Type: field.TypeInt, Default: 30},
+		{Name: "last_sync_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "last_status", Type: field.TypeString, Nullable: true, Size: 20},
+		{Name: "last_error", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+	}
+	// UpstreamConnectionsTable holds the schema information for the "upstream_connections" table.
+	UpstreamConnectionsTable = &schema.Table{
+		Name:       "upstream_connections",
+		Columns:    UpstreamConnectionsColumns,
+		PrimaryKey: []*schema.Column{UpstreamConnectionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_upstream_connections_base_url",
+				Unique:  true,
+				Columns: []*schema.Column{UpstreamConnectionsColumns[4]},
+			},
+		},
+	}
+	// UpstreamSyncRunsColumns holds the columns for the "upstream_sync_runs" table.
+	UpstreamSyncRunsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "started_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"success", "partial", "failed"}, Default: "success"},
+		{Name: "keys_fetched", Type: field.TypeInt, Default: 0},
+		{Name: "accounts_matched", Type: field.TypeInt, Default: 0},
+		{Name: "accounts_updated", Type: field.TypeInt, Default: 0},
+		{Name: "accounts_unchanged", Type: field.TypeInt, Default: 0},
+		{Name: "accounts_unmatched", Type: field.TypeInt, Default: 0},
+		{Name: "details", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "error", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "connection_id", Type: field.TypeInt64},
+	}
+	// UpstreamSyncRunsTable holds the schema information for the "upstream_sync_runs" table.
+	UpstreamSyncRunsTable = &schema.Table{
+		Name:       "upstream_sync_runs",
+		Columns:    UpstreamSyncRunsColumns,
+		PrimaryKey: []*schema.Column{UpstreamSyncRunsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "upstream_sync_runs_upstream_connections_sync_runs",
+				Columns:    []*schema.Column{UpstreamSyncRunsColumns[11]},
+				RefColumns: []*schema.Column{UpstreamConnectionsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_upstream_sync_runs_connection_started",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamSyncRunsColumns[11], UpstreamSyncRunsColumns[1]},
+			},
+			{
+				Name:    "idx_upstream_sync_runs_status_started",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamSyncRunsColumns[3], UpstreamSyncRunsColumns[1]},
+			},
+		},
+	}
 	// UsageCleanupTasksColumns holds the columns for the "usage_cleanup_tasks" table.
 	UsageCleanupTasksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -2094,6 +2167,8 @@ var (
 		SettingsTable,
 		SubscriptionPlansTable,
 		TLSFingerprintProfilesTable,
+		UpstreamConnectionsTable,
+		UpstreamSyncRunsTable,
 		UsageCleanupTasksTable,
 		UsageLogsTable,
 		UsersTable,
@@ -2221,6 +2296,13 @@ func init() {
 	}
 	TLSFingerprintProfilesTable.Annotation = &entsql.Annotation{
 		Table: "tls_fingerprint_profiles",
+	}
+	UpstreamConnectionsTable.Annotation = &entsql.Annotation{
+		Table: "upstream_connections",
+	}
+	UpstreamSyncRunsTable.ForeignKeys[0].RefTable = UpstreamConnectionsTable
+	UpstreamSyncRunsTable.Annotation = &entsql.Annotation{
+		Table: "upstream_sync_runs",
 	}
 	UsageCleanupTasksTable.Annotation = &entsql.Annotation{
 		Table: "usage_cleanup_tasks",

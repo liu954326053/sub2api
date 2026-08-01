@@ -93,8 +93,10 @@ type Group struct {
 	Description    string  `json:"description"`
 	Platform       string  `json:"platform"`
 	RateMultiplier float64 `json:"rate_multiplier"`
-	IsExclusive    bool    `json:"is_exclusive"`
-	Status         string  `json:"status"`
+	// BillingMode 计价模式：group_multiplier（默认）| account_upstream（按命中账号上游倍率，rate_multiplier 为兜底）
+	BillingMode string `json:"billing_mode"`
+	IsExclusive bool   `json:"is_exclusive"`
+	Status      string `json:"status"`
 
 	SubscriptionType string   `json:"subscription_type"`
 	DailyLimitUSD    *float64 `json:"daily_limit_usd"`

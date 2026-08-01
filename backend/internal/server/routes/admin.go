@@ -117,8 +117,27 @@ func RegisterAdminRoutes(
 		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)
 
+		// 上游倍率同步
+		registerUpstreamRateSyncRoutes(admin, h)
+
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
+	}
+}
+
+// registerUpstreamRateSyncRoutes 上游倍率同步管理端点（openspec add-upstream-rate-sync）。
+// 响应 DTO 全部脱敏：不输出凭证/token 明文或密文。
+func registerUpstreamRateSyncRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	rateSync := admin.Group("/upstream-rate-sync")
+	{
+		rateSync.GET("/connections", h.Admin.UpstreamRateSync.ListConnections)
+		rateSync.POST("/connections", h.Admin.UpstreamRateSync.CreateConnection)
+		rateSync.GET("/connections/:id", h.Admin.UpstreamRateSync.GetConnection)
+		rateSync.PUT("/connections/:id", h.Admin.UpstreamRateSync.UpdateConnection)
+		rateSync.DELETE("/connections/:id", h.Admin.UpstreamRateSync.DeleteConnection)
+		rateSync.POST("/connections/:id/test", h.Admin.UpstreamRateSync.TestConnection)
+		rateSync.POST("/connections/:id/sync", h.Admin.UpstreamRateSync.SyncConnection)
+		rateSync.GET("/runs", h.Admin.UpstreamRateSync.ListRuns)
 	}
 }
 

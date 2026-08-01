@@ -10,6 +10,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/service/upstreamratesync"
 	"github.com/google/wire"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -727,6 +728,8 @@ var ProviderSet = wire.NewSet(
 	ProvideAccountUsageService,
 	ProvideAccountTestService,
 	ProvideUpstreamBillingProbeService,
+	ProvideUpstreamRateSyncer,
+	ProvideUpstreamRateSyncService,
 	ProvideOllamaCloudUsageService,
 	ProvideSettingService,
 	NewDataManagementService,
@@ -843,4 +846,35 @@ func ProvideChannelMonitorRunner(svc *ChannelMonitorService, settingService *Set
 	svc.SetScheduler(r)
 	r.Start()
 	return r
+}
+
+// ProvideUpstreamRateSyncer 创建上游倍率同步引擎：账号读写网关复用
+// NewUpstreamRateSyncAccountGateway 适配器，凭证加密复用 wire 已注入的
+// SecretEncryptor（AES-256-GCM）。
+func ProvideUpstreamRateSyncer(
+	connRepo upstreamratesync.ConnectionRepository,
+	runRepo upstreamratesync.SyncRunRepository,
+	accountRepo AccountRepository,
+	encryptor SecretEncryptor,
+) *upstreamratesync.Syncer {
+	return upstreamratesync.NewSyncer(connRepo, runRepo, NewUpstreamRateSyncAccountGateway(accountRepo), encryptor)
+}
+
+// ProvideUpstreamRateSyncService 创建并启动上游倍率同步后台 runner。
+// leader lock 采用 SetLeaderLock 可选注入模式（仿 ProvideUpstreamBillingProbeService）：
+// Redis 锁优先、PG advisory lock 回退；锁后端注入失败（如 Redis 故障）只在
+// 运行期降级，不阻塞主 API 启动。Runner.Stop 由 cleanup function 调用。
+func ProvideUpstreamRateSyncService(
+	syncer *upstreamratesync.Syncer,
+	connRepo upstreamratesync.ConnectionRepository,
+	runRepo upstreamratesync.SyncRunRepository,
+	lockCache LeaderLockCache,
+	db *sql.DB,
+) *upstreamratesync.UpstreamRateSyncService {
+	svc := upstreamratesync.NewUpstreamRateSyncService(syncer, connRepo, runRepo)
+	svc.SetLeaderLock(lockCache, func(ctx context.Context, key string) (func(), bool, error) {
+		return tryAcquireDBAdvisoryLockWithError(ctx, db, hashAdvisoryLockID(key))
+	})
+	svc.Start()
+	return svc
 }

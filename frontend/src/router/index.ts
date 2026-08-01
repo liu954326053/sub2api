@@ -611,6 +611,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/upstream-rate-sync',
+    name: 'AdminUpstreamRateSync',
+    component: () => import('@/features/upstream-rate-sync/UpstreamRateSyncView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Upstream Rate Sync',
+      titleKey: 'admin.upstreamRateSync.title',
+      descriptionKey: 'admin.upstreamRateSync.description'
+    }
+  },
+  {
     path: '/admin/usage',
     name: 'AdminUsage',
     component: () => import('@/views/admin/UsageView.vue'),

@@ -8,11 +8,36 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+	"github.com/Wei-Shaw/sub2api/internal/service/upstreamratesync"
 )
 
 type OpenAIMessagesDispatchModelConfig = domain.OpenAIMessagesDispatchModelConfig
 type GroupModelsListConfig = domain.GroupModelsListConfig
 type ReasoningEffortMapping = domain.ReasoningEffortMapping
+
+// 分组计价模式（groups.billing_mode，迁移 192）。
+// 唯一事实源在 upstreamratesync/ports.go（Wave 1 先行落地），此处保留别名以
+// 兼容 service 包内既有引用；service 包已 import upstreamratesync，方向不成环。
+const (
+	// GroupBillingModeGroupMultiplier 默认：按分组统一倍率计费（升级前行为）。
+	GroupBillingModeGroupMultiplier = upstreamratesync.GroupBillingModeGroupMultiplier
+	// GroupBillingModeAccountUpstream 按命中账号的上游同步倍率计费，分组倍率降级为兜底。
+	GroupBillingModeAccountUpstream = upstreamratesync.GroupBillingModeAccountUpstream
+)
+
+// NormalizeGroupBillingMode 归一化计价模式：空值落默认 group_multiplier（升级前行为）；
+// 其他值原样返回，合法性由 IsValidGroupBillingMode 校验。
+func NormalizeGroupBillingMode(mode string) string {
+	if mode == "" {
+		return GroupBillingModeGroupMultiplier
+	}
+	return mode
+}
+
+// IsValidGroupBillingMode 校验计价模式是否合法枚举值。
+func IsValidGroupBillingMode(mode string) bool {
+	return mode == GroupBillingModeGroupMultiplier || mode == GroupBillingModeAccountUpstream
+}
 
 type Group struct {
 	ID             int64
@@ -20,6 +45,10 @@ type Group struct {
 	Description    string
 	Platform       string
 	RateMultiplier float64
+	// BillingMode 计价模式：group_multiplier（默认，按分组统一倍率）|
+	// account_upstream（按命中账号的上游同步倍率计费，RateMultiplier 降级为兜底倍率）。
+	// 空值按 group_multiplier 处理（旧数据/旧缓存兼容）。
+	BillingMode string
 	// 高峰时段倍率：peak_rate_enabled 为 true 且当前时刻处于 [PeakStart, PeakEnd) 时，
 	// token 计费倍率额外乘以 PeakRateMultiplier。详见 PeakMultiplierAt。
 	PeakRateEnabled    bool

@@ -103,6 +103,11 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetPeakStart(groupIn.PeakStart).
 		SetPeakEnd(groupIn.PeakEnd).
 		SetPeakRateMultiplier(groupIn.PeakRateMultiplier)
+	// billing_mode 为 NOT NULL + CHECK 枚举列：仅在有值时显式写入，
+	// 空值走数据库默认值 group_multiplier（兼容未感知该字段的旧调用方）。
+	if groupIn.BillingMode != "" {
+		builder = builder.SetBillingMode(groupIn.BillingMode)
+	}
 	if groupIn.DuplicateOperationID != "" {
 		builder = builder.SetDuplicateOperationID(groupIn.DuplicateOperationID)
 	}
@@ -269,6 +274,11 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetPeakStart(groupIn.PeakStart).
 		SetPeakEnd(groupIn.PeakEnd).
 		SetPeakRateMultiplier(groupIn.PeakRateMultiplier)
+
+	// billing_mode 为 NOT NULL + CHECK 枚举列：仅在有值时更新，空值表示不改动该列。
+	if groupIn.BillingMode != "" {
+		builder = builder.SetBillingMode(groupIn.BillingMode)
+	}
 
 	// 显式处理可空字段：nil 需要 clear，非 nil 需要 set。
 	if groupIn.DailyLimitUSD != nil {

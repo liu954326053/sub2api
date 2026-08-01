@@ -34,7 +34,8 @@ func TestAccountHandlerGetUpstreamBillingProbeSettingsReturnsDefaults(t *testing
 		Data service.UpstreamBillingProbeSettings `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	require.True(t, response.Data.Enabled)
+	// P1 起旧 runner 默认关闭（被上游倍率同步取代）。
+	require.False(t, response.Data.Enabled)
 	require.Equal(t, 30, response.Data.IntervalMinutes)
 }
 

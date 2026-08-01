@@ -584,7 +584,22 @@
         </div>
         <div>
           <label class="input-label">{{
-            t("admin.groups.form.rateMultiplier")
+            t("admin.groups.form.billingMode")
+          }}</label>
+          <select v-model="createForm.billing_mode" class="input">
+            <option value="group_multiplier">
+              {{ t("admin.groups.form.billingModeGroupMultiplier") }}
+            </option>
+            <option value="account_upstream">
+              {{ t("admin.groups.form.billingModeAccountUpstream") }}
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="input-label">{{
+            createForm.billing_mode === "account_upstream"
+              ? t("admin.groups.form.fallbackRateMultiplier")
+              : t("admin.groups.form.rateMultiplier")
           }}</label>
           <input
             v-model.number="createForm.rate_multiplier"
@@ -595,7 +610,13 @@
             class="input"
             data-tour="group-form-multiplier"
           />
-          <p class="input-hint">{{ t("admin.groups.rateMultiplierHint") }}</p>
+          <p class="input-hint">
+            {{
+              createForm.billing_mode === "account_upstream"
+                ? t("admin.groups.form.fallbackRateMultiplierHint")
+                : t("admin.groups.rateMultiplierHint")
+            }}
+          </p>
         </div>
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
@@ -2138,7 +2159,22 @@
         </div>
         <div>
           <label class="input-label">{{
-            t("admin.groups.form.rateMultiplier")
+            t("admin.groups.form.billingMode")
+          }}</label>
+          <select v-model="editForm.billing_mode" class="input">
+            <option value="group_multiplier">
+              {{ t("admin.groups.form.billingModeGroupMultiplier") }}
+            </option>
+            <option value="account_upstream">
+              {{ t("admin.groups.form.billingModeAccountUpstream") }}
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="input-label">{{
+            editForm.billing_mode === "account_upstream"
+              ? t("admin.groups.form.fallbackRateMultiplier")
+              : t("admin.groups.form.rateMultiplier")
           }}</label>
           <input
             v-model.number="editForm.rate_multiplier"
@@ -2149,6 +2185,12 @@
             class="input"
             data-tour="group-form-multiplier"
           />
+          <p
+            v-if="editForm.billing_mode === 'account_upstream'"
+            class="input-hint"
+          >
+            {{ t("admin.groups.form.fallbackRateMultiplierHint") }}
+          </p>
         </div>
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
@@ -4055,6 +4097,7 @@ import type {
   CompositeRouteDecision,
   CompositeRouteEndpoint,
   CompositeRouteMatchType,
+  GroupBillingMode,
   GroupPlatform,
   SubscriptionType,
 } from "@/types";
@@ -4590,6 +4633,7 @@ const createForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  billing_mode: "group_multiplier" as GroupBillingMode,
   is_exclusive: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
@@ -4939,6 +4983,7 @@ const editForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+  billing_mode: "group_multiplier" as GroupBillingMode,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
   subscription_type: "standard" as SubscriptionType,
@@ -5388,6 +5433,7 @@ const closeCreateModal = () => {
   createForm.description = "";
   createForm.platform = "anthropic";
   createForm.rate_multiplier = 1.0;
+  createForm.billing_mode = "group_multiplier";
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
@@ -5567,6 +5613,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.description = group.description || "";
   editForm.platform = group.platform;
   editForm.rate_multiplier = group.rate_multiplier;
+  editForm.billing_mode = group.billing_mode ?? "group_multiplier";
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
   editForm.subscription_type = group.subscription_type || "standard";

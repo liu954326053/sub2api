@@ -221,7 +221,8 @@ func TestUpstreamBillingProbeSettingsDefaultsAndValidation(t *testing.T) {
 
 	settings, err := settingsService.GetUpstreamBillingProbeSettings(context.Background())
 	require.NoError(t, err)
-	require.True(t, settings.Enabled)
+	// P1 起旧 runner 默认关闭（被上游倍率同步取代），仅存显式开启的设置。
+	require.False(t, settings.Enabled)
 	require.Equal(t, 30, settings.IntervalMinutes)
 
 	err = settingsService.SetUpstreamBillingProbeSettings(context.Background(), &UpstreamBillingProbeSettings{
@@ -244,7 +245,8 @@ func TestUpstreamBillingProbeSettingsDefaultsAndValidation(t *testing.T) {
 	repo.values[SettingKeyUpstreamBillingProbeSettings] = `{"interval_minutes":45}`
 	settings, err = settingsService.GetUpstreamBillingProbeSettings(context.Background())
 	require.NoError(t, err)
-	require.True(t, settings.Enabled)
+	// 存储值未含 enabled 字段时继承默认值（P1 起默认关闭）。
+	require.False(t, settings.Enabled)
 	require.Equal(t, 45, settings.IntervalMinutes)
 	repo.values[SettingKeyUpstreamBillingProbeSettings] = `{"enabled":false}`
 	settings, err = settingsService.GetUpstreamBillingProbeSettings(context.Background())
@@ -686,13 +688,17 @@ func TestUpstreamBillingProbeRunnerOnlyScansOnLeader(t *testing.T) {
 	upstream := &upstreamBillingProbeHTTPStub{}
 	cache := &fakeLeaderLockCache{}
 	lockKey := upstreamBillingProbeLeaderLockKeyAt(time.Now())
-	peer := newUpstreamBillingProbeTestService(repo, upstream, &upstreamBillingProbeSettingRepo{})
+	// P1 起 runner 默认关闭，本测试显式开启以验证 leader lock 语义。
+	enabledSettings := &upstreamBillingProbeSettingRepo{values: map[string]string{
+		SettingKeyUpstreamBillingProbeSettings: `{"enabled":true,"interval_minutes":30}`,
+	}}
+	peer := newUpstreamBillingProbeTestService(repo, upstream, enabledSettings)
 	peer.instanceID = "peer"
 	peer.SetLeaderLock(cache, nil)
 	_, acquired, err := peer.tryAcquireLeaderLock(context.Background(), lockKey)
 	require.NoError(t, err)
 	require.True(t, acquired)
-	svc := newUpstreamBillingProbeTestService(repo, upstream, &upstreamBillingProbeSettingRepo{})
+	svc := newUpstreamBillingProbeTestService(repo, upstream, enabledSettings)
 	svc.SetLeaderLock(cache, nil)
 
 	require.NoError(t, svc.RunDue(context.Background()))

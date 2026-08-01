@@ -1690,3 +1690,92 @@ func TestAdminService_PreviewCompositeRouteUsesExplicitRoutes(t *testing.T) {
 	require.NotNil(t, decision.Route)
 	require.Equal(t, int64(11), decision.Route.ID)
 }
+
+func TestAdminService_CreateGroupBillingMode(t *testing.T) {
+	t.Run("nil defaults to group_multiplier", func(t *testing.T) {
+		repo := &groupRepoStubForAdmin{}
+		svc := &adminServiceImpl{groupRepo: repo}
+
+		group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+			Name:           "billing-mode-default",
+			RateMultiplier: 1.0,
+		})
+
+		require.NoError(t, err)
+		require.Equal(t, GroupBillingModeGroupMultiplier, group.BillingMode)
+		require.Equal(t, GroupBillingModeGroupMultiplier, repo.created.BillingMode)
+	})
+
+	t.Run("account_upstream accepted", func(t *testing.T) {
+		repo := &groupRepoStubForAdmin{}
+		svc := &adminServiceImpl{groupRepo: repo}
+
+		group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+			Name:           "billing-mode-upstream",
+			RateMultiplier: 1.0,
+			BillingMode:    ptrString(GroupBillingModeAccountUpstream),
+		})
+
+		require.NoError(t, err)
+		require.Equal(t, GroupBillingModeAccountUpstream, group.BillingMode)
+		require.Equal(t, GroupBillingModeAccountUpstream, repo.created.BillingMode)
+	})
+
+	t.Run("invalid value rejected", func(t *testing.T) {
+		repo := &groupRepoStubForAdmin{}
+		svc := &adminServiceImpl{groupRepo: repo}
+
+		_, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+			Name:           "billing-mode-bogus",
+			RateMultiplier: 1.0,
+			BillingMode:    ptrString("bogus"),
+		})
+
+		require.Error(t, err)
+		require.Nil(t, repo.created)
+	})
+}
+
+func TestAdminService_UpdateGroupBillingMode(t *testing.T) {
+	t.Run("nil keeps current mode", func(t *testing.T) {
+		repo := &groupRepoStubForAdmin{
+			getByID: &Group{ID: 9, Name: "g", RateMultiplier: 1.0, BillingMode: GroupBillingModeAccountUpstream},
+		}
+		svc := &adminServiceImpl{groupRepo: repo}
+
+		group, err := svc.UpdateGroup(context.Background(), 9, &UpdateGroupInput{})
+
+		require.NoError(t, err)
+		require.Equal(t, GroupBillingModeAccountUpstream, group.BillingMode)
+		require.Equal(t, GroupBillingModeAccountUpstream, repo.updated.BillingMode)
+	})
+
+	t.Run("valid value applied", func(t *testing.T) {
+		repo := &groupRepoStubForAdmin{
+			getByID: &Group{ID: 9, Name: "g", RateMultiplier: 1.0, BillingMode: GroupBillingModeGroupMultiplier},
+		}
+		svc := &adminServiceImpl{groupRepo: repo}
+
+		group, err := svc.UpdateGroup(context.Background(), 9, &UpdateGroupInput{
+			BillingMode: ptrString(GroupBillingModeAccountUpstream),
+		})
+
+		require.NoError(t, err)
+		require.Equal(t, GroupBillingModeAccountUpstream, group.BillingMode)
+		require.Equal(t, GroupBillingModeAccountUpstream, repo.updated.BillingMode)
+	})
+
+	t.Run("invalid value rejected", func(t *testing.T) {
+		repo := &groupRepoStubForAdmin{
+			getByID: &Group{ID: 9, Name: "g", RateMultiplier: 1.0, BillingMode: GroupBillingModeGroupMultiplier},
+		}
+		svc := &adminServiceImpl{groupRepo: repo}
+
+		_, err := svc.UpdateGroup(context.Background(), 9, &UpdateGroupInput{
+			BillingMode: ptrString("bogus"),
+		})
+
+		require.Error(t, err)
+		require.Nil(t, repo.updated)
+	})
+}

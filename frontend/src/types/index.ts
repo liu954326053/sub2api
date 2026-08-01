@@ -512,12 +512,16 @@ export interface ReasoningEffortMapping {
   to: string
 }
 
+export type GroupBillingMode = 'group_multiplier' | 'account_upstream'
+
 export interface Group {
   id: number
   name: string
   description: string | null
   platform: GroupPlatform
   rate_multiplier: number
+  // 计价模式：group_multiplier（默认，分组统一倍率）| account_upstream（按命中账号上游倍率，rate_multiplier 为兜底）
+  billing_mode?: GroupBillingMode
   rpm_limit?: number // Group-level RPM cap (0 = unlimited); overrides user-level rpm_limit when set
   max_reasoning_effort?: string // OpenAI/Codex reasoning ceiling; empty means unlimited
   reasoning_effort_mappings?: ReasoningEffortMapping[]
@@ -717,6 +721,7 @@ export interface CreateGroupRequest {
   description?: string | null
   platform?: GroupPlatform
   rate_multiplier?: number
+  billing_mode?: GroupBillingMode
   is_exclusive?: boolean
   subscription_type?: SubscriptionType
   daily_limit_usd?: number | null
@@ -767,6 +772,7 @@ export interface UpdateGroupRequest {
   description?: string | null
   platform?: GroupPlatform
   rate_multiplier?: number
+  billing_mode?: GroupBillingMode
   is_exclusive?: boolean
   status?: 'active' | 'inactive'
   subscription_type?: SubscriptionType

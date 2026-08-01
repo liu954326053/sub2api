@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 17 // v17: include the OpenAI group Live gate
+const apiKeyAuthSnapshotVersion = 18 // v18: include the group billing_mode
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -385,6 +385,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			Status:                          apiKey.Group.Status,
 			SubscriptionType:                apiKey.Group.SubscriptionType,
 			RateMultiplier:                  apiKey.Group.RateMultiplier,
+			BillingMode:                     apiKey.Group.BillingMode,
 			DailyLimitUSD:                   apiKey.Group.DailyLimitUSD,
 			WeeklyLimitUSD:                  apiKey.Group.WeeklyLimitUSD,
 			MonthlyLimitUSD:                 apiKey.Group.MonthlyLimitUSD,
@@ -464,14 +465,17 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 	}
 	if snapshot.Group != nil {
 		apiKey.Group = &Group{
-			ID:                              snapshot.Group.ID,
-			Name:                            snapshot.Group.Name,
-			Platform:                        snapshot.Group.Platform,
-			IsExclusive:                     snapshot.Group.IsExclusive,
-			Status:                          snapshot.Group.Status,
-			Hydrated:                        true,
-			SubscriptionType:                snapshot.Group.SubscriptionType,
-			RateMultiplier:                  snapshot.Group.RateMultiplier,
+			ID:               snapshot.Group.ID,
+			Name:             snapshot.Group.Name,
+			Platform:         snapshot.Group.Platform,
+			IsExclusive:      snapshot.Group.IsExclusive,
+			Status:           snapshot.Group.Status,
+			Hydrated:         true,
+			SubscriptionType: snapshot.Group.SubscriptionType,
+			RateMultiplier:   snapshot.Group.RateMultiplier,
+			// 旧版本快照（或任何缺字段来源）反序列化后 BillingMode 为空，
+			// 归一化落默认值 group_multiplier，避免被误读为新语义。
+			BillingMode:                     NormalizeGroupBillingMode(snapshot.Group.BillingMode),
 			DailyLimitUSD:                   snapshot.Group.DailyLimitUSD,
 			WeeklyLimitUSD:                  snapshot.Group.WeeklyLimitUSD,
 			MonthlyLimitUSD:                 snapshot.Group.MonthlyLimitUSD,

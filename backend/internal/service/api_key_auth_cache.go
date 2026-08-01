@@ -56,13 +56,17 @@ type APIKeyAuthUserSnapshot struct {
 
 // APIKeyAuthGroupSnapshot 分组快照
 type APIKeyAuthGroupSnapshot struct {
-	ID                              int64    `json:"id"`
-	Name                            string   `json:"name"`
-	Platform                        string   `json:"platform"`
-	IsExclusive                     bool     `json:"is_exclusive"`
-	Status                          string   `json:"status"`
-	SubscriptionType                string   `json:"subscription_type"`
-	RateMultiplier                  float64  `json:"rate_multiplier"`
+	ID               int64   `json:"id"`
+	Name             string  `json:"name"`
+	Platform         string  `json:"platform"`
+	IsExclusive      bool    `json:"is_exclusive"`
+	Status           string  `json:"status"`
+	SubscriptionType string  `json:"subscription_type"`
+	RateMultiplier   float64 `json:"rate_multiplier"`
+	// BillingMode 分组计价模式（group_multiplier | account_upstream）。
+	// account_upstream 时计费基础倍率读命中账号的上游同步倍率，rate_multiplier 降级为兜底；
+	// 必须随快照缓存，否则扣费路径拿到的 apiKey.Group 缺字段、计价模式失效。
+	BillingMode                     string   `json:"billing_mode,omitempty"`
 	DailyLimitUSD                   *float64 `json:"daily_limit_usd,omitempty"`
 	WeeklyLimitUSD                  *float64 `json:"weekly_limit_usd,omitempty"`
 	MonthlyLimitUSD                 *float64 `json:"monthly_limit_usd,omitempty"`

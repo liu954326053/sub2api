@@ -45,6 +45,11 @@ func (Group) Fields() []ent.Field {
 		field.Float("rate_multiplier").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(1.0),
+		// 计价模式（added by migration 192）
+		field.String("billing_mode").
+			MaxLen(20).
+			Default("group_multiplier").
+			Comment("计价模式：group_multiplier（分组统一倍率，默认）| account_upstream（账号级上游倍率，rate_multiplier 降级为兜底倍率）"),
 		// 高峰时段倍率（added by migration 158）
 		field.Bool("peak_rate_enabled").
 			Default(false).

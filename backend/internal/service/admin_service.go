@@ -209,10 +209,12 @@ type AdminBoundAuthIdentityChannel struct {
 }
 
 type CreateGroupInput struct {
-	Name             string
-	Description      string
-	Platform         string
-	RateMultiplier   float64
+	Name           string
+	Description    string
+	Platform       string
+	RateMultiplier float64
+	// BillingMode 计价模式：nil/空 按默认 group_multiplier；非法值报错。
+	BillingMode      *string
 	IsExclusive      bool
 	SubscriptionType string   // standard/subscription
 	DailyLimitUSD    *float64 // 日限额 (USD)
@@ -269,10 +271,12 @@ type CreateGroupInput struct {
 }
 
 type UpdateGroupInput struct {
-	Name             string
-	Description      *string
-	Platform         string
-	RateMultiplier   *float64 // 使用指针以支持设置为0
+	Name           string
+	Description    *string
+	Platform       string
+	RateMultiplier *float64 // 使用指针以支持设置为0
+	// BillingMode 计价模式：nil 表示不修改；非法值报错。
+	BillingMode      *string
 	IsExclusive      *bool
 	Status           string
 	SubscriptionType string   // standard/subscription

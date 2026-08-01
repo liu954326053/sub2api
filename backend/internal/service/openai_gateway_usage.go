@@ -151,20 +151,8 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		ImageOutputTokens:   result.Usage.ImageOutputTokens,
 	}
 
-	// Get rate multiplier
-	multiplier := 1.0
-	if s.cfg != nil {
-		multiplier = s.cfg.Default.RateMultiplier
-	}
-	if apiKey.GroupID != nil && apiKey.Group != nil {
-		multiplier = s.ResolveUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, apiKey.Group.RateMultiplier)
-	}
-	// token 倍率叠加高峰因子（token 计费含图片 token，图片按次倍率不受影响）。高峰因子按请求时刻现算，
-	// 不并入上面的 Resolve，以免污染 user:group 倍率缓存。
-	baseMultiplier := multiplier
-	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, baseMultiplier, timezone.Now())
-	videoMultiplier := resolveVideoRateMultiplier(apiKey, baseMultiplier)
-
+	// 倍率解析在下方 resolveCredentialAccount 之后进行：account_upstream 计价模式
+	// 需要读命中账号（影子账号解析后的凭证账号）的上游同步倍率。
 	var cost *CostBreakdown
 	var err error
 	billingModel := forwardResultBillingModel(result.Model, result.UpstreamModel)
@@ -196,6 +184,24 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			return err
 		}
 	}
+
+	// Get rate multiplier（优先级：用户专属 >（account_upstream 模式读命中账号倍率，否则分组默认）> 系统默认）
+	// MUST 在 resolveCredentialAccount 之后读取账号倍率：影子账号本身不携带上游同步倍率；
+	// 未解析到账号（billingAccount 为 nil）时 resolveBillingBaseMultiplier 回退分组兜底。
+	multiplier := 1.0
+	if s.cfg != nil {
+		multiplier = s.cfg.Default.RateMultiplier
+	}
+	if apiKey.GroupID != nil && apiKey.Group != nil {
+		base := resolveBillingBaseMultiplier(apiKey.Group, billingAccount)
+		multiplier = s.ResolveUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, base)
+	}
+	// token 倍率叠加高峰因子（token 计费含图片 token，图片按次倍率不受影响）。高峰因子按请求时刻现算，
+	// 不并入上面的 Resolve，以免污染 user:group 倍率缓存。
+	baseMultiplier := multiplier
+	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, baseMultiplier, timezone.Now())
+	videoMultiplier := resolveVideoRateMultiplier(apiKey, baseMultiplier)
+
 	longContextBillingEnabled := billingAccount.IsOpenAILongContextBillingEnabled()
 	cost, err = s.calculateOpenAIRecordUsageCost(
 		ctx,

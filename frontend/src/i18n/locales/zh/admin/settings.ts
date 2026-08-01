@@ -355,6 +355,7 @@ export default {
       upstreamBillingProbe: {
         title: '上游倍率自动探测',
         description: '定期获取 OpenAI API Key 所连接上游 Sub2API 站点声明的计费倍率。',
+        deprecatedHint: '已弃用，请使用上游倍率同步。本功能默认关闭，与新同步禁止同时启用（双生产者互斥）。',
         enabled: '启用全局自动探测',
         enabledHint: '开启后，仅对账号自身已启用自动检测的账号执行定时探测；关闭后停止所有定时探测，手动探测不受影响。',
         intervalMinutes: '探测周期（分钟）',

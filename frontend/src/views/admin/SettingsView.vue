@@ -4364,6 +4364,12 @@
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 {{ t("admin.settings.upstreamBillingProbe.description") }}
               </p>
+              <p
+                class="mt-2 text-sm text-amber-600 dark:text-amber-400"
+                data-testid="upstream-billing-probe-deprecated-hint"
+              >
+                {{ t("admin.settings.upstreamBillingProbe.deprecatedHint") }}
+              </p>
             </div>
             <div class="space-y-5 p-6">
               <div
