@@ -939,26 +939,31 @@ func NewUpstreamRateSyncAccountGateway(accountRepo AccountRepository) upstreamra
 }
 
 func (g *upstreamRateSyncAccountGateway) ListScopedAccounts(ctx context.Context, scopeBaseURL string) ([]upstreamratesync.ScopedAccount, error) {
-	accounts, err := g.accountRepo.ListByPlatform(ctx, PlatformOpenAI)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]upstreamratesync.ScopedAccount, 0, len(accounts))
-	for i := range accounts {
-		account := &accounts[i]
-		if account.Type != AccountTypeAPIKey {
-			continue
+	// 上游 Sub2API 的 sk- key 可绑定任意平台分组（claude/openai/gemini/grok…），
+	// 本地 relay 型账号统一按 credentials.base_url + credentials.api_key 匹配，
+	// 因此加载全部平台的 apikey 账号，不再只限 OpenAI。
+	var out []upstreamratesync.ScopedAccount
+	for _, platform := range []string{PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformGrok, PlatformAntigravity} {
+		accounts, err := g.accountRepo.ListByPlatform(ctx, platform)
+		if err != nil {
+			return nil, err
 		}
-		baseURL, err := upstreamratesync.NormalizeBaseURL(account.GetOpenAIBaseURL())
-		if err != nil || baseURL != scopeBaseURL {
-			continue
+		for i := range accounts {
+			account := &accounts[i]
+			if account.Type != AccountTypeAPIKey {
+				continue
+			}
+			baseURL, err := upstreamratesync.NormalizeBaseURL(account.GetCredential("base_url"))
+			if err != nil || baseURL != scopeBaseURL {
+				continue
+			}
+			out = append(out, upstreamratesync.ScopedAccount{
+				ID:             account.ID,
+				APIKey:         account.GetCredential("api_key"),
+				RateMultiplier: account.RateMultiplier,
+				LastSyncedRate: lastSyncedRateFromExtra(account.Extra),
+			})
 		}
-		out = append(out, upstreamratesync.ScopedAccount{
-			ID:             account.ID,
-			APIKey:         account.GetOpenAIApiKey(),
-			RateMultiplier: account.RateMultiplier,
-			LastSyncedRate: lastSyncedRateFromExtra(account.Extra),
-		})
 	}
 	return out, nil
 }
