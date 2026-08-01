@@ -69,6 +69,7 @@
       {{ statusLabel }}
     </span>
     <button
+      v-if="canManualProbe"
       type="button"
       class="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
       :disabled="probing"
@@ -105,7 +106,10 @@ defineEmits<{
 
 const { t } = useI18n()
 const CLOCK_SKEW_TOLERANCE_MS = 5 * 60 * 1000
-const eligible = computed(() => props.account.platform === 'openai' && props.account.type === 'apikey')
+const eligible = computed(() => props.account.type === 'apikey')
+// 手动探测走旧 upstream billing probe（仅 OpenAI）；其他平台的快照由
+// 上游倍率同步（upstream rate sync）写入，不提供逐账号手动探测。
+const canManualProbe = computed(() => props.account.platform === 'openai')
 const snapshot = computed<UpstreamBillingProbeSnapshot | undefined>(() => props.account.extra?.upstream_billing_probe)
 const data = computed(() => snapshot.value?.data)
 const probeEnabled = computed(() => props.account.extra?.upstream_billing_probe_enabled === true)

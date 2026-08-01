@@ -273,6 +273,31 @@ describe('UpstreamBillingRateCell', () => {
     expect(wrapper.text()).toBe('-')
   })
 
+  it('shows snapshot for non-openai apikey accounts without a manual probe button', () => {
+    const wrapper = mount(UpstreamBillingRateCell, {
+      props: {
+        account: makeAccount({
+          platform: 'anthropic',
+          extra: {
+            upstream_billing_probe: {
+              status: 'ok',
+              data: { ...billingData },
+              received_at: new Date().toISOString(),
+              fresh_until: new Date(Date.now() + 3600_000).toISOString(),
+              last_attempt_at: new Date().toISOString(),
+              next_probe_at: new Date(Date.now() + 3600_000).toISOString()
+            }
+          }
+        }),
+        now: Date.now()
+      }
+    })
+    // anthropic apikey 账号也展示同步写入的快照，但手动探测按钮仅 OpenAI 提供。
+    expect(wrapper.text()).not.toBe('-')
+    expect(wrapper.find('[data-testid="upstream-billing-rate"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="upstream-billing-probe"]').exists()).toBe(false)
+  })
+
   it('fails neutral for malformed data and timestamps', async () => {
     const malformedAccount = (
       dataOverrides: Partial<typeof billingData> = {},
