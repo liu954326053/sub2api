@@ -1212,7 +1212,7 @@ func (g *upstreamRateSyncAccountGateway) WriteSyncedRate(ctx context.Context, ac
 		FreshUntil:    &freshUntil,
 		LastAttemptAt: snapshot.ReceivedAt,
 		NextProbeAt:   snapshot.NextProbeAt,
-	})
+	}, &rate)
 }
 
 // lastSyncedRateFromExtra 解析 extra.last_synced_rate（三方比对基准）。
