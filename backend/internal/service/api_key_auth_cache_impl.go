@@ -14,10 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-// v18: include the group billing_mode
-// v19: group search/audio/video_model_prices billing fields (force refresh of pre-fix snapshots)
-// v20: merge of v18 + v19 (force refresh of snapshots lacking either set of fields)
-const apiKeyAuthSnapshotVersion = 20
+const apiKeyAuthSnapshotVersion = 20 // v20: group long-context and model pricing fields (force refresh of pre-fix snapshots)
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -410,6 +407,8 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			AudioRealtimePricePerMin:        apiKey.Group.AudioRealtimePricePerMin,
 			AudioTTSPricePerMillionChars:    apiKey.Group.AudioTTSPricePerMillionChars,
 			AudioSTTPricePerHour:            apiKey.Group.AudioSTTPricePerHour,
+			LongContextPricingEnabled:       apiKey.Group.LongContextPricingEnabled,
+			ModelPricing:                    apiKey.Group.ModelPricing,
 			ClaudeCodeOnly:                  apiKey.Group.ClaudeCodeOnly,
 			FallbackGroupID:                 apiKey.Group.FallbackGroupID,
 			FallbackGroupIDOnInvalidRequest: apiKey.Group.FallbackGroupIDOnInvalidRequest,
@@ -475,18 +474,17 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 		},
 	}
 	if snapshot.Group != nil {
+		billingMode := NormalizeGroupBillingMode(snapshot.Group.BillingMode)
 		apiKey.Group = &Group{
-			ID:               snapshot.Group.ID,
-			Name:             snapshot.Group.Name,
-			Platform:         snapshot.Group.Platform,
-			IsExclusive:      snapshot.Group.IsExclusive,
-			Status:           snapshot.Group.Status,
-			Hydrated:         true,
-			SubscriptionType: snapshot.Group.SubscriptionType,
-			RateMultiplier:   snapshot.Group.RateMultiplier,
-			// 旧版本快照（或任何缺字段来源）反序列化后 BillingMode 为空，
-			// 归一化落默认值 group_multiplier，避免被误读为新语义。
-			BillingMode:                     NormalizeGroupBillingMode(snapshot.Group.BillingMode),
+			ID:                              snapshot.Group.ID,
+			Name:                            snapshot.Group.Name,
+			Platform:                        snapshot.Group.Platform,
+			IsExclusive:                     snapshot.Group.IsExclusive,
+			Status:                          snapshot.Group.Status,
+			Hydrated:                        true,
+			SubscriptionType:                snapshot.Group.SubscriptionType,
+			RateMultiplier:                  snapshot.Group.RateMultiplier,
+			BillingMode:                     billingMode,
 			DailyLimitUSD:                   snapshot.Group.DailyLimitUSD,
 			WeeklyLimitUSD:                  snapshot.Group.WeeklyLimitUSD,
 			MonthlyLimitUSD:                 snapshot.Group.MonthlyLimitUSD,
@@ -508,6 +506,8 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			AudioRealtimePricePerMin:        snapshot.Group.AudioRealtimePricePerMin,
 			AudioTTSPricePerMillionChars:    snapshot.Group.AudioTTSPricePerMillionChars,
 			AudioSTTPricePerHour:            snapshot.Group.AudioSTTPricePerHour,
+			LongContextPricingEnabled:       snapshot.Group.LongContextPricingEnabled,
+			ModelPricing:                    snapshot.Group.ModelPricing,
 			ClaudeCodeOnly:                  snapshot.Group.ClaudeCodeOnly,
 			FallbackGroupID:                 snapshot.Group.FallbackGroupID,
 			FallbackGroupIDOnInvalidRequest: snapshot.Group.FallbackGroupIDOnInvalidRequest,
