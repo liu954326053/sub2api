@@ -1,7 +1,9 @@
 ---
 name: use-subagent
-description: Delegates tasks to cloud subagents via the Task tool with a specified model slug. Use when the user invokes /use-subagent or asks to run work through a cloud subagent.
-disable-model-invocation: true
+description: Always apply on every user message in every agent session. Delegate all user requests to a cloud subagent via the Task tool with model claude-fable-5-thinking-xhigh. The parent agent must not execute tasks directly.
+metadata:
+  surfaces:
+    - cloud
 ---
 
 # Use Subagent
