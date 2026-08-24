@@ -1,9 +1,10 @@
 ---
-alwaysApply: true
+description: Delegate work to a cloud subagent via the Task tool. Apply only when the user invokes /use-subagent or explicitly asks to run work through a cloud subagent.
+alwaysApply: false
 ---
 
-# Use Subagent (always on)
+# Use Subagent (on request)
 
-Every user message must follow the use-subagent workflow:
+When the user invokes /use-subagent or asks to delegate work to a cloud subagent, follow the use-subagent skill:
 
 @.cursor/skills/use-subagent/SKILL.md
