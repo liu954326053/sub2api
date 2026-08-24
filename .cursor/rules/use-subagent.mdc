@@ -1,0 +1,9 @@
+---
+alwaysApply: true
+---
+
+# Use Subagent (always on)
+
+Every user message must follow the use-subagent workflow:
+
+@.cursor/skills/use-subagent/SKILL.md
