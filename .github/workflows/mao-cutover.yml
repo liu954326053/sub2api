@@ -1,0 +1,116 @@
+name: Mao Blue-Green Cutover
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-mao-production
+  cancel-in-progress: false
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install SSH client helper
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Switch Mao traffic to v0.2.1
+        env:
+          SSHPASS: ${{ secrets.MAO_SSH_PASSWORD }}
+          MAO_SSH_HOST: ${{ secrets.MAO_SSH_HOST }}
+          MAO_SSH_USER: ${{ secrets.MAO_SSH_USER }}
+        run: |
+          sshpass -e ssh \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=15 \
+            "${MAO_SSH_USER}@${MAO_SSH_HOST}" 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+
+          deploy_dir=/opt/deployments/sub2api-mao
+          old_container=sub2api-mao-green-bbba449f9
+          old_image=sub2api-mao:green-bbba449f9
+          new_container=sub2api-mao-green-93a60d962
+          new_image=sub2api-mao:green-93a60d962
+          new_commit=93a60d9623f447622393f53f5f1262f05ce73922
+          new_version=0.2.1
+          new_port=18093
+          tunnel_bin=/usr/local/bin/cloudflared
+          canonical_config=${deploy_dir}/cloudflared.yml
+          new_config=${deploy_dir}/cloudflared.green-93a60d962.yml
+          tunnel_log=${deploy_dir}/cloudflared-93a60d962.log
+
+          test "$(docker inspect -f '{{.State.Health.Status}}' "${new_container}")" = healthy
+          curl -fsS "http://127.0.0.1:${new_port}/health" | grep -q '"status":"ok"'
+          curl -fsS "http://127.0.0.1:${new_port}/api/v1/settings/public" | grep -q '"version":"0.2.1"'
+
+          sed -E 's#127\.0\.0\.1:1809[0-9]#127.0.0.1:18093#' "${canonical_config}" > "${new_config}"
+          grep -q '127.0.0.1:18093' "${new_config}"
+          chmod 600 "${new_config}"
+
+          mapfile -t old_tunnel_pids < <(
+            pgrep -f '^/usr/local/bin/cloudflared --no-autoupdate --config /opt/deployments/sub2api-mao/cloudflared.yml tunnel run$' || true
+          )
+
+          nohup "${tunnel_bin}" --no-autoupdate --config "${new_config}" tunnel run \
+            >"${tunnel_log}" 2>&1 </dev/null &
+          new_tunnel_pid=$!
+          echo "${new_tunnel_pid}" > "${deploy_dir}/cloudflared.pid"
+
+          registered=false
+          for _ in $(seq 1 30); do
+            if kill -0 "${new_tunnel_pid}" 2>/dev/null && grep -q 'Registered tunnel connection' "${tunnel_log}"; then
+              registered=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "${registered}" != true ]; then
+            cat "${tunnel_log}"
+            exit 1
+          fi
+
+          cp -a "${canonical_config}" "${canonical_config}.bak-$(date -u +%Y%m%dT%H%M%SZ)"
+          cp "${new_config}" "${canonical_config}"
+          chmod 600 "${canonical_config}"
+
+          for pid in "${old_tunnel_pids[@]}"; do
+            kill -TERM "${pid}" || true
+          done
+
+          for _ in $(seq 1 30); do
+            public_version=$(curl -fsS https://mao.magic-aigc.org/api/v1/settings/public | grep -o '"version":"[^"]*"' | head -1 || true)
+            if [ "${public_version}" = '"version":"0.2.1"' ]; then
+              break
+            fi
+            sleep 2
+          done
+          test "${public_version}" = '"version":"0.2.1"'
+          curl -fsS https://mao.magic-aigc.org/health | grep -q '"status":"ok"'
+
+          docker update --restart unless-stopped "${new_container}" >/dev/null
+          docker update --restart no "${old_container}" >/dev/null
+          docker stop --time 30 "${old_container}" >/dev/null
+
+          state_tmp=${deploy_dir}/bluegreen-state.env.new
+          cat > "${state_tmp}" <<STATE
+          ACTIVE_CONTAINER=${new_container}
+          ACTIVE_IMAGE=${new_image}
+          ACTIVE_COMMIT=${new_commit}
+          ACTIVE_VERSION=${new_version}
+          ACTIVE_PORT=${new_port}
+          ACTIVE_ROUTE=mao.magic-aigc.org
+          ROLLBACK_CONTAINER=${old_container}
+          ROLLBACK_IMAGE=${old_image}
+          ROLLBACK_COMMIT=bbba449f935d6e7dc10692365c6252700c1d5d0e
+          ROLLBACK_PORT=18092
+          CUTOVER_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          STATE
+          mv "${state_tmp}" "${deploy_dir}/bluegreen-state.env"
+          chmod 640 "${deploy_dir}/bluegreen-state.env"
+
+          docker inspect -f '{{.Name}} {{.State.Status}}/{{.State.Health.Status}} {{.Config.Image}}' "${new_container}"
+          cat "${deploy_dir}/bluegreen-state.env"
+          REMOTE
