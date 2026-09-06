@@ -2,6 +2,15 @@ name: Mao Blue-Green Cutover
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Operation to run
+        required: true
+        type: choice
+        default: inspect
+        options:
+          - inspect
+          - cutover
 
 permissions:
   contents: read
@@ -17,7 +26,28 @@ jobs:
       - name: Install SSH client helper
         run: sudo apt-get update && sudo apt-get install -y sshpass
 
+      - name: Inspect Mao host
+        if: ${{ inputs.mode == 'inspect' }}
+        env:
+          SSHPASS: ${{ secrets.MAO_SSH_PASSWORD }}
+          MAO_SSH_HOST: ${{ secrets.MAO_SSH_HOST }}
+          MAO_SSH_USER: ${{ secrets.MAO_SSH_USER }}
+        run: |
+          sshpass -e ssh \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=15 \
+            "${MAO_SSH_USER}@${MAO_SSH_HOST}" 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          hostname
+          date -u
+          id
+          docker ps -a --format '{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' || true
+          find /opt /home /root -maxdepth 4 -type f \( -name compose.yaml -o -name docker-compose.yml \) -print 2>/dev/null || true
+          pgrep -af cloudflared || true
+          REMOTE
+
       - name: Switch Mao traffic to v0.2.1
+        if: ${{ inputs.mode == 'cutover' }}
         env:
           SSHPASS: ${{ secrets.MAO_SSH_PASSWORD }}
           MAO_SSH_HOST: ${{ secrets.MAO_SSH_HOST }}
