@@ -1196,6 +1196,10 @@ func init() {
 	groupDescModelsListConfig := groupFields[55].Descriptor()
 	// group.DefaultModelsListConfig holds the default value on creation for the models_list_config field.
 	group.DefaultModelsListConfig = groupDescModelsListConfig.Default.(domain.GroupModelsListConfig)
+	// groupDescCodexModelsManifestConfig is the schema descriptor for codex_models_manifest_config field.
+	groupDescCodexModelsManifestConfig := groupFields[55].Descriptor()
+	// group.DefaultCodexModelsManifestConfig holds the default value on creation for the codex_models_manifest_config field.
+	group.DefaultCodexModelsManifestConfig = groupDescCodexModelsManifestConfig.Default.(domain.GroupCodexModelsManifestConfig)
 	// groupDescRpmLimit is the schema descriptor for rpm_limit field.
 	groupDescRpmLimit := groupFields[56].Descriptor()
 	// group.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
