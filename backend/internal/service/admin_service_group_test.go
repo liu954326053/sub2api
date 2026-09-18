@@ -2227,6 +2227,8 @@ func TestAdminService_UpdateGroupBillingMode(t *testing.T) {
 		require.Error(t, err)
 		require.Nil(t, repo.updated)
 	})
+}
+
 // accountRepoStubForGroupCodexManifest 支撑固定账号 manifest 配置校验测试。
 type accountRepoStubForGroupCodexManifest struct {
 	AccountRepository
